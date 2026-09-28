@@ -4,7 +4,7 @@
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands'
 import { bracketMatching, foldGutter, foldKeymap, indentOnInput } from '@codemirror/language'
 import { highlightSelectionMatches, search, searchKeymap } from '@codemirror/search'
-import { Compartment, EditorState, type Text } from '@codemirror/state'
+import { Compartment, EditorState, StateEffect, StateField, type Text } from '@codemirror/state'
 import {
   crosshairCursor,
   drawSelection,
@@ -48,6 +48,8 @@ export type CodeEditorProps = {
   onLines?: (lines: number) => void
   /** A comment asked for on `lines`, the first being line `from` (from 1): the gutter's `+`, or ⌘⇧A. */
   onComment?: (from: number, lines: string[]) => void
+  /** Lines a comment waiting in the review batch quotes, 1-based; each keeps a dot in the comment gutter. */
+  pending?: readonly number[]
   /** A line to put the cursor on and bring into view, once per `token`; 1-based. */
   goTo?: { line: number; column: number; token: number }
   onWent?: (token: number) => void
@@ -64,6 +66,28 @@ class PlusMarker extends GutterMarker {
 
 const PLUS = new PlusMarker()
 
+/** A batched comment's line: the dot at rest, the `+` under the pointer, as the diff draws it. */
+class PendingMarker extends GutterMarker {
+  override toDOM(): Node {
+    const mark = document.createElement('span')
+    mark.className = 'cm-commentPending'
+    const dot = document.createElement('span')
+    dot.className = 'status-dot'
+    dot.setAttribute('role', 'img')
+    dot.setAttribute('aria-label', 'Comment in batch')
+    mark.append(dot, PLUS.toDOM())
+    return mark
+  }
+}
+
+const PENDING = new PendingMarker()
+const setPending = StateEffect.define<ReadonlySet<number>>()
+const pendingLines = StateField.define<ReadonlySet<number>>({
+  create: () => new Set(),
+  update: (lines, transaction) =>
+    transaction.effects.reduce((next, effect) => (effect.is(setPending) ? effect.value : next), lines)
+})
+
 export function CodeEditor({
   ref,
   path,
@@ -75,6 +99,7 @@ export function CodeEditor({
   onEdit,
   onComment,
   onLines,
+  pending,
   goTo,
   onWent
 }: CodeEditorProps): React.JSX.Element {
@@ -113,7 +138,10 @@ export function CodeEditor({
     const commentable = callbacks.current.onComment !== undefined
     const commentGutter = gutter({
       class: 'cm-commentGutter',
-      lineMarker: () => PLUS,
+      lineMarker: (editor, line) =>
+        editor.state.field(pendingLines).has(editor.state.doc.lineAt(line.from).number) ? PENDING : PLUS,
+      lineMarkerChange: (update) =>
+        update.transactions.some((tr) => tr.effects.some((effect) => effect.is(setPending))),
       initialSpacer: () => PLUS,
       domEventHandlers: { mousedown: (editor, line) => comment(editor, line.from) }
     })
@@ -121,7 +149,7 @@ export function CodeEditor({
       doc: draftText ?? savedText,
       extensions: [
         EditorState.lineSeparator.of(lineEnding),
-        commentable ? commentGutter : [],
+        commentable ? [pendingLines, commentGutter] : [],
         lineNumbers(),
         highlightActiveLineGutter(),
         foldGutter(),
@@ -192,6 +220,13 @@ export function CodeEditor({
   useEffect(() => {
     if (focused && view.current !== null && !view.current.hasFocus) view.current.focus()
   }, [focused])
+
+  const pendingKey = pending?.join(',') ?? ''
+  useEffect(() => {
+    const editor = view.current
+    if (editor === null || editor.state.field(pendingLines, false) === undefined) return
+    editor.dispatch({ effects: setPending.of(new Set(pending)) })
+  }, [pendingKey])
 
   const token = goTo?.token
   useEffect(() => {

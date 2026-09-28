@@ -7,6 +7,11 @@ import { declarationOf, opacitiesOf, parse, ruleFor } from './css'
 const SHEET = 'panes.css'
 
 describe('panes.css', () => {
+  // The pointer is still on the link when the right-click menu opens; its tip would cover the first item.
+  it('hides a link’s tip while a menu is open', () => {
+    expect(declarationOf(ruleFor(SHEET, "body:has([role='menu']) .pane-link-tip"), 'display')).toBe('none')
+  })
+
   it.each([
     ['.pane', 'var(--bg-pane)'],
     ['.pane--terminal', 'var(--term-bg)']

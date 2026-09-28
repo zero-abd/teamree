@@ -17,19 +17,24 @@ export async function readProjectBase(runner: GitRunner, options: ProjectBaseOpt
   const branch = baseBranch(options.baseRef)
   // One process: the upstream and git's own ahead/behind for it.
   const read = await runner.tryRun({
-    args: ['for-each-ref', '--format=%(upstream:short)%00%(upstream:track,nobracket)', `refs/heads/${branch}`],
+    args: [
+      'for-each-ref',
+      '--format=%(upstream:short)%00%(upstream:track,nobracket)%00%(objectname)',
+      `refs/heads/${branch}`
+    ],
     cwd: options.repoPath,
     readOnly: true,
     timeoutMs: 30_000
   })
-  const [upstream = '', track = ''] = (read.exitCode === 0 ? read.stdout.trim() : '').split('\0')
+  const [upstream = '', track = '', head = ''] = (read.exitCode === 0 ? read.stdout.trim() : '').split('\0')
   const count = (word: string): number => Number(new RegExp(`${word} (\\d+)`).exec(track)?.[1] ?? 0)
   return {
     projectId: options.projectId,
     branch,
     ...(upstream === '' || track === 'gone' ? {} : { upstream }),
     ahead: count('ahead'),
-    behind: count('behind')
+    behind: count('behind'),
+    ...(head === '' ? {} : { head })
   }
 }
 
@@ -79,12 +84,21 @@ export async function pullProjectBase(runner: GitRunner, options: ProjectBaseOpt
   return readProjectBase(runner, options)
 }
 
-/** Puts the checkout's base back at origin's, undoing local landings; refused when a commit only it holds would go. */
-export async function resetProjectBase(runner: GitRunner, options: ProjectBaseOptions): Promise<ProjectBase> {
+/**
+ * Puts the checkout's base back at origin's, undoing local landings, or with `landing` at the tip one landing
+ * found; refused when a commit only it holds would go, and a landing's undo once the branch moved or was pushed.
+ */
+export async function resetProjectBase(
+  runner: GitRunner,
+  options: ProjectBaseOptions,
+  landing?: { head: string; before: string }
+): Promise<ProjectBase> {
   const branch = baseBranch(options.baseRef)
   const cwd = options.repoPath
   await requireCheckedOut(runner, cwd, branch)
   const tracking = `refs/remotes/${REMOTE}/${branch}`
+  const target = landing === undefined ? tracking : landing.before
+  if (landing !== undefined) await requireUnmovedLanding(runner, cwd, branch, tracking, landing)
   // Merge commits are the landings themselves; every other commit must still be on some other branch.
   const only = await runner.tryRun({
     args: [
@@ -93,7 +107,7 @@ export async function resetProjectBase(runner: GitRunner, options: ProjectBaseOp
       '--no-merges',
       `refs/heads/${branch}`,
       '--not',
-      tracking,
+      target,
       `--exclude=${branch}`,
       '--branches'
     ],
@@ -110,13 +124,33 @@ export async function resetProjectBase(runner: GitRunner, options: ProjectBaseOp
       `${count} ${count === 1 ? 'commit is' : 'commits are'} only on ${branch}`
     )
   }
-  const reset = await runner.tryRun({ args: ['reset', '--keep', tracking], cwd, timeoutMs: 120_000 })
+  const reset = await runner.tryRun({ args: ['reset', '--keep', target], cwd, timeoutMs: 120_000 })
   if (reset.exitCode !== 0) {
     throw new GitServiceError(ErrorCode.Conflict, firstLine(reset.stderr) || `could not reset ${branch}`, {
       detail: reset.stderr.trim()
     })
   }
   return readProjectBase(runner, options)
+}
+
+async function requireUnmovedLanding(
+  runner: GitRunner,
+  cwd: string,
+  branch: string,
+  tracking: string,
+  landing: { head: string; before: string }
+): Promise<void> {
+  const read = (args: string[]): Promise<{ exitCode: number; stdout: string }> =>
+    runner.tryRun({ args, cwd, readOnly: true })
+  const tip = (await read(['rev-parse', `refs/heads/${branch}`])).stdout.trim()
+  if (tip !== landing.head) throw new GitServiceError(ErrorCode.Conflict, `${branch} has moved since`)
+  if ((await read(['merge-base', '--is-ancestor', landing.before, landing.head])).exitCode !== 0) {
+    throw new GitServiceError(ErrorCode.Conflict, `${landing.before.slice(0, 7)} is not behind ${branch}`)
+  }
+  const tracked = (await read(['rev-parse', '--verify', '--quiet', `${tracking}^{commit}`])).exitCode === 0
+  if (tracked && (await read(['merge-base', '--is-ancestor', landing.head, tracking])).exitCode === 0) {
+    throw new GitServiceError(ErrorCode.Conflict, `${branch} was pushed`)
+  }
 }
 
 async function requireCheckedOut(runner: GitRunner, cwd: string, branch: string): Promise<void> {

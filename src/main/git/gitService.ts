@@ -1623,7 +1623,7 @@ export class GitService {
   }
 
   async projectResetBase(params: ParamsOf<'project.resetBase'>): Promise<ProjectBase> {
-    return resetProjectBase(this.#runner, this.#baseOptions(params.projectId))
+    return resetProjectBase(this.#runner, this.#baseOptions(params.projectId), params.landing)
   }
 
   #baseOptions(projectId: string): ProjectBaseOptions {

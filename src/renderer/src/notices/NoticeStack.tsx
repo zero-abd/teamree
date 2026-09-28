@@ -17,7 +17,7 @@ import { UpdateAvailableCard } from '../updates/UpdateAvailableCard'
 import { askForYou, useMessageStore } from '../state/messages'
 import { hiddenAsks, type HiddenAsk } from './askingNotices'
 import { SendBlockToAgent } from '../workspace/rightPanel/CommitBlocked'
-import { NOTICE_ICON, noticeLook, noticeParts } from './noticeView'
+import { liveAction, NOTICE_ICON, noticeLook, noticeParts } from './noticeView'
 import { useAnnouncements } from './useAnnouncements'
 
 /** The slide out is 180 ms; this is only for a card whose animation never ends (none running, a test). */
@@ -84,6 +84,7 @@ function NoticeCard({ notice, onLeft }: { notice: Notice; onLeft?: () => void })
   const hideRegion = useWorkspaceStore((state) => state.hideRegion)
   const undo = useWorkspaceStore((state) => state.undo)
   const resumeAgents = useWorkspaceStore((state) => state.resumeAgents)
+  const action = useWorkspaceStore((state) => liveAction(notice.action, state.bases))
   const look = noticeLook(notice)
   const { title, detail } = noticeParts(notice.text)
   const leaving = onLeft !== undefined
@@ -91,7 +92,6 @@ function NoticeCard({ notice, onLeft }: { notice: Notice; onLeft?: () => void })
   const actionVariant = look === 'error' ? 'secondary' : 'ghost'
 
   const act = (): void => {
-    const action = notice.action
     if (action === undefined) return
     if ('url' in action) {
       openInBrowser(action.url)
@@ -122,12 +122,12 @@ function NoticeCard({ notice, onLeft }: { notice: Notice; onLeft?: () => void })
       <div className="notice__body">
         <p className="notice__title">{title}</p>
         {detail === null ? null : <p className="notice__detail">{detail}</p>}
-        {notice.action === undefined && notice.lock === undefined && notice.commitBlock === undefined ? null : (
+        {action === undefined && notice.lock === undefined && notice.commitBlock === undefined ? null : (
           <div className="notice__actions">
-            {notice.action === undefined ? null : (
+            {action === undefined ? null : (
               // The verb is the whole button.
               <Button variant={actionVariant} size="sm" onClick={act}>
-                {notice.action.label}
+                {action.label}
               </Button>
             )}
             {notice.lock === undefined ? null : <LockActions lock={notice.lock} />}

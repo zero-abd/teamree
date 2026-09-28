@@ -1,12 +1,13 @@
 // A file as a pane: a path bar, then the viewer its content calls for, or its
 // working-tree diff.
 
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { FileContent } from '@shared/entities'
 import { filePaneName } from '@shared/filePane'
 import type { FilePaneProps } from '../panes/FilePane'
 import { CommentComposer } from '../review/CommentComposer'
-import type { QuotedLine } from '../review/reviewComments'
+import type { QuotedLine, ReviewComment } from '../review/reviewComments'
+import { useReviewStore } from '../review/reviewStore'
 import { runtimeClient } from '../runtimeClient/currentRuntimeClient'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import type { CodeEditorHandle } from './CodeEditor'
@@ -52,6 +53,8 @@ export function FileView({
   const [error, setError] = useState<string | null>(null)
   const [conflict, setConflict] = useState(false)
   const [comment, setComment] = useState<QuotedLine[] | null>(null)
+  const batch = useReviewStore((state) => state.batch[worktreeId])
+  const pending = useMemo(() => codeLinesIn(batch, path), [batch, path])
   const diff = useFileDiff(paneId, worktreeId, path)
   const showDiff = diff.shown
   const editor = useRef<CodeEditorHandle | null>(null)
@@ -243,6 +246,7 @@ export function FileView({
                 onDirtyChange={onDirtyChange}
                 onEdit={onEdit}
                 onComment={(from, lines) => setComment(quotedCode(from, lines))}
+                pending={pending}
                 onLines={(lines) => noteEditorLines(worktreeId, path, lines)}
                 {...(goTo === null ? {} : { goTo })}
                 onWent={wentToLine}
@@ -286,6 +290,17 @@ export function FileView({
       )}
     </section>
   )
+}
+
+/** The file's lines batched comments quote from this view (`quotedCode`'s shape, no old number), in order. */
+function codeLinesIn(batch: readonly ReviewComment[] | undefined, path: string): number[] {
+  const lines = (batch ?? [])
+    .filter((comment) => comment.path === path)
+    .flatMap((comment) => comment.lines)
+    .flatMap((line) =>
+      line.kind === 'context' && line.oldNumber === null && line.newNumber !== null ? [line.newNumber] : []
+    )
+  return [...new Set(lines)].sort((a, b) => a - b)
 }
 
 /** Lines of the file as it is, numbered from `from`. */
