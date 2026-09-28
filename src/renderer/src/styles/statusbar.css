@@ -55,7 +55,6 @@
   box-shadow: var(--ring);
 }
 
-/* Gives way first: the git line beside it says more about the worktree than its name does. */
 .statusbar__tokens {
   flex: none;
   color: var(--fg-muted);
@@ -63,6 +62,7 @@
   white-space: nowrap;
 }
 
+/* Gives way first: the git line beside it says more about the worktree than its name does. */
 .statusbar__branch {
   flex: 0 1000 auto;
   gap: 5px;
