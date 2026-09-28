@@ -404,13 +404,6 @@ button.picker__chevron:hover {
 }
 
 
-/* The permission modes are radios in the segmented well: the chosen one lifts out of it. */
-.agents__modes .segmented__item[aria-checked='true'] {
-  background: var(--bg-raised);
-  box-shadow: var(--shadow-1);
-  color: var(--fg);
-}
-
 /* Bypass is the one mode that skips every question: chosen, it reads as the danger it is. */
 .agents__modes .agents__mode--bypass[aria-checked='true'] {
   background: color-mix(in srgb, var(--danger) 20%, var(--bg-raised));

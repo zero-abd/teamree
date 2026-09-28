@@ -88,6 +88,25 @@ describe('F6', () => {
     expect(regionAfter(null, -1)).toBe('panel')
   })
 
+  // #567: the corner stack's asks and review requests are a stop of their own, after the panel.
+  it('reaches the notices after the panel while one offers something to press, and passes them by otherwise', () => {
+    document.body.insertAdjacentHTML(
+      'beforeend',
+      `<div data-region="notices">
+        <div class="notice" inert><div class="notice__actions"><button id="gone">Undo</button></div></div>
+        <div class="notice"><div class="notice__actions"><button id="redis">redis</button></div></div>
+      </div>`
+    )
+    expect(regionAfter('panel', 1)).toBe('notices')
+    expect(regionAfter('notices', 1)).toBe('sidebar')
+    expect(regionAfter('sidebar', -1)).toBe('notices')
+    expect(focusRegion('notices')).toBe(true)
+    expect(document.activeElement?.id).toBe('redis')
+    expect(regionOf(document.activeElement)).toBe('notices')
+    document.querySelector('[data-region="notices"]')?.replaceChildren()
+    expect(regionAfter('panel', 1)).toBe('sidebar')
+  })
+
   it('passes over a region that is not drawn', () => {
     document.querySelector('[data-region="sidebar"]')?.remove()
     expect(regionAfter('panel', 1)).toBe('strip')

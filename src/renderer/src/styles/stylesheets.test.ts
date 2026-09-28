@@ -2,10 +2,12 @@
 // tokens match the default presets. Each sheet's own pins live in `tests/<sheet>.test.ts`.
 
 import { describe, expect, it } from 'vitest'
-import { contrastRatio, mix, parseColor, type Rgb } from '@shared/color'
+import { contrastRatio, mix, opaqueHex, parseColor, type Rgb } from '@shared/color'
 import {
   BUILT_IN_THEMES,
   DEFAULT_APPEARANCE,
+  DEFAULT_LIGHT_THEME_ID,
+  DEFAULT_THEME_ID,
   resolvePalette,
   THEME_TOKENS,
   themeTone,
@@ -321,7 +323,72 @@ describe('stylesheets', () => {
       expect(contrastRatio(seen, under), `${ground} at ${rest}`).toBeGreaterThanOrEqual(3)
     }
   })
+
+  // #567: a chosen segment is still a control; whatever lifts it out of the well, the keyboard on it lights the ring.
+  it('rings a focused segment, chosen or not, with the shared ring', () => {
+    const shadows: string[] = []
+    for (const name of sheets) {
+      parse(name).walkDecls('box-shadow', (decl) => {
+        const selector = (decl.parent as postcss.Rule).selector
+        if (/segmented__item|file__seg/.test(selector)) shadows.push(`${name}: ${selector}: ${decl.value}`)
+      })
+    }
+    expect(shadows).toEqual([
+      "base.css: .segmented__item:is([aria-pressed='true'], [aria-checked='true']): var(--shadow-1)",
+      'base.css: .segmented__item:focus-visible: var(--ring)',
+      "files.css: .file__seg > button[aria-pressed='true']: var(--shadow-1)",
+      'files.css: .file__seg > button:focus-visible: var(--ring)'
+    ])
+  })
+
+  // #567: the small state words, measured where they are drawn: every flat surface, the teammate group's and an
+  // asking worktree's tints, and the hover wash over a row. The default presets; the older ones are not held to it.
+  describe.each([DEFAULT_THEME_ID, DEFAULT_LIGHT_THEME_ID])('small state text on its grounds in %s', (id) => {
+    const palette = paletteOf(id)
+    const background = (selector: string): string | undefined =>
+      declarationOf(ruleFor('sidebar.css', selector), 'background')
+    const teammate = painted(background('.teammate'), palette)
+    const grounds: Record<string, Rgb> = {
+      ...Object.fromEntries(GROUNDS.map((token) => [token, rgbOf(palette[token])])),
+      teammate,
+      'teammate hover': painted(palette['bg-hover'], palette, teammate),
+      'asking worktree': painted(background('.worktree--asking'), palette),
+      'rail hover': painted(palette['bg-hover'], palette, rgbOf(palette['bg-rail']))
+    }
+    it.each(['fg-muted', 'stopped', 'warning', 'success'])('%s clears 4.5:1 on each', (ink) => {
+      const below = Object.entries(grounds)
+        .map(([name, ground]) => ({ name, ratio: contrastRatio(rgbOf(palette[ink]), ground) }))
+        .filter(({ ratio }) => ratio < 4.5)
+        .map(({ name, ratio }) => `${name} ${ratio.toFixed(2)}`)
+      expect(below).toEqual([])
+    })
+  })
 })
+
+/** The flat surfaces text is drawn straight onto. */
+const GROUNDS = [
+  'bg-window',
+  'bg-pane',
+  'bg-rail',
+  'bg-tabstrip',
+  'bg-tabstrip-active',
+  'bg-panel',
+  'bg-raised',
+  'bg-elevated',
+  'bg-worktree',
+  'bg-sunken',
+  'bg-input'
+] as const
+
+/** A background as painted: a token, a translucent token over `under`, or an sRGB `color-mix` of two tokens. */
+function painted(value: string | undefined, palette: Record<string, string>, under?: Rgb): Rgb {
+  const token = (name: string | undefined): string => palette[name ?? ''] ?? ''
+  const blend = /^color-mix\(in srgb, var\(--([\w-]+)\) ([\d.]+)%, var\(--([\w-]+)\)\)$/.exec(value ?? '')
+  if (blend !== null) return mix(rgbOf(token(blend[3])), rgbOf(token(blend[1])), Number(blend[2]) / 100)
+  const named = /^var\(--([\w-]+)\)$/.exec(value ?? '')
+  const colour = named === null ? (value ?? '') : token(named[1])
+  return rgbOf(opaqueHex(colour, under ?? { r: 0, g: 0, b: 0 }) ?? '')
+}
 
 // Colours no theme should move: over a pasted image, the app icon's own tile, initials on a teammate's
 // colour, and a mask's alpha.

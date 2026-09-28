@@ -492,7 +492,8 @@ kbd {
   color: var(--fg);
 }
 
-.segmented__item[aria-pressed='true'] {
+/* Chosen: a pressed toggle, or a radio such as a permission mode. */
+.segmented__item:is([aria-pressed='true'], [aria-checked='true']) {
   background: var(--bg-raised);
   box-shadow: var(--shadow-1);
   color: var(--fg);

@@ -215,7 +215,7 @@ export const BUILT_IN_THEMES: readonly BuiltInTheme[] = [
       'line-strong': '#3b4251',
       fg: '#f1f3f8',
       'fg-secondary': '#aeb4c0',
-      'fg-muted': '#7f8795',
+      'fg-muted': '#878f9c',
       accent: STUDIO_ACCENT,
       'accent-bright': '#958bff',
       'accent-soft': 'rgb(116 103 255 / 15%)',
@@ -255,7 +255,7 @@ export const BUILT_IN_THEMES: readonly BuiltInTheme[] = [
       'accent-hover': '#6754e8',
       'accent-press': '#5f4bd2',
       working: '#49a8f2',
-      stopped: '#7f8795'
+      stopped: '#878f9c'
     }
   },
   {
@@ -294,14 +294,14 @@ export const BUILT_IN_THEMES: readonly BuiltInTheme[] = [
       'line-strong': '#b8bec9',
       fg: '#171a22',
       'fg-secondary': '#505866',
-      'fg-muted': '#626b79',
+      'fg-muted': '#5c6471',
       accent: '#5848df',
       'accent-bright': '#4c3bd5',
       'accent-soft': 'rgb(88 72 223 / 11%)',
       'accent-line': 'rgb(76 59 213 / 42%)',
       'on-accent': '#ffffff',
-      success: '#177a50',
-      warning: '#9b5f08',
+      success: '#15714a',
+      warning: '#8f5707',
       danger: '#bd3848',
       info: '#17689e',
       'term-bg': '#ffffff',
@@ -335,7 +335,7 @@ export const BUILT_IN_THEMES: readonly BuiltInTheme[] = [
       'accent-hover': '#4f3ed5',
       'accent-press': '#4232bd',
       working: '#176da8',
-      stopped: '#626b79'
+      stopped: '#5c6471'
     }
   },
   {
