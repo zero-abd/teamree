@@ -26,16 +26,32 @@ export function idleAgentPane(
 export function failureMessage(pull: NonNullable<WorktreeLanding['pullRequest']>, failures: CheckFailure[]): string {
   const blocks = failures.map((failure) => {
     const head = failure.url === undefined ? failure.name : `${failure.name} ${failure.url}`
-    if (failure.excerpt === '') return head
-    const longest = Math.max(0, ...(failure.excerpt.match(/`+/g) ?? []).map((run) => run.length))
-    const fence = '`'.repeat(Math.max(3, longest + 1))
-    return [head, fence, failure.excerpt, fence].join('\n')
+    return failure.excerpt === '' ? head : `${head}\n${fenced(failure.excerpt)}`
   })
   const names = failures.map((failure) => failure.name).join(', ')
   return [`PR #${pull.number} checks failed: ${names}`, ...blocks, 'Fix them and push.'].join('\n\n')
 }
 
+/** `text` in a code fence longer than any backtick run inside it. */
+export function fenced(text: string): string {
+  const longest = Math.max(0, ...(text.match(/`+/g) ?? []).map((run) => run.length))
+  const fence = '`'.repeat(Math.max(3, longest + 1))
+  return [fence, text, fence].join('\n')
+}
+
 export type FailureOutcome = 'sent' | 'refused' | 'failed'
+
+/** Pastes `message` into the pane and submits it. */
+export async function typeInto(terminalId: string, message: string): Promise<FailureOutcome> {
+  try {
+    await runtimeClient.call('terminal.write', { terminalId, data: pasted(message) })
+    await new Promise((resolve) => setTimeout(resolve, PASTE_SETTLE_MS))
+    await runtimeClient.call('terminal.write', { terminalId, data: '\r' })
+    return 'sent'
+  } catch {
+    return 'failed'
+  }
+}
 
 export async function sendCheckFailure(worktreeId: string): Promise<FailureOutcome> {
   const store = useWorkspaceStore.getState
@@ -57,12 +73,5 @@ export async function sendCheckFailure(worktreeId: string): Promise<FailureOutco
   // The logs take a while; the agent may have been given something else to do meanwhile.
   const current = store().terminals[target.id]
   if (current === undefined || idleAgentPane({ [current.id]: current }, worktreeId) === undefined) return 'refused'
-  try {
-    await runtimeClient.call('terminal.write', { terminalId: target.id, data: pasted(failureMessage(pull, failures)) })
-    await new Promise((resolve) => setTimeout(resolve, PASTE_SETTLE_MS))
-    await runtimeClient.call('terminal.write', { terminalId: target.id, data: '\r' })
-    return 'sent'
-  } catch {
-    return 'failed'
-  }
+  return typeInto(target.id, failureMessage(pull, failures))
 }

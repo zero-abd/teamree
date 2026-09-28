@@ -15,6 +15,7 @@ import { SharedNotePopups } from '../teamwork/SharedNotePopups'
 import { UpdateAvailableCard } from '../updates/UpdateAvailableCard'
 import { askForYou, useMessageStore } from '../state/messages'
 import { hiddenAsks, type HiddenAsk } from './askingNotices'
+import { SendBlockToAgent } from '../workspace/rightPanel/CommitBlocked'
 import { NOTICE_ICON, noticeLook, noticeParts } from './noticeView'
 import { useAnnouncements } from './useAnnouncements'
 
@@ -117,7 +118,7 @@ function NoticeCard({ notice, onLeft }: { notice: Notice; onLeft?: () => void })
       <div className="notice__body">
         <p className="notice__title">{title}</p>
         {detail === null ? null : <p className="notice__detail">{detail}</p>}
-        {notice.action === undefined && notice.lock === undefined ? null : (
+        {notice.action === undefined && notice.lock === undefined && notice.commitBlock === undefined ? null : (
           <div className="notice__actions">
             {notice.action === undefined ? null : (
               // The verb is the whole button.
@@ -126,6 +127,9 @@ function NoticeCard({ notice, onLeft }: { notice: Notice; onLeft?: () => void })
               </Button>
             )}
             {notice.lock === undefined ? null : <LockActions lock={notice.lock} />}
+            {notice.commitBlock === undefined ? null : (
+              <CommitBlockActions worktreeId={notice.commitBlock.worktreeId} onSent={() => dismissNotice(notice.id)} />
+            )}
           </div>
         )}
       </div>
@@ -136,6 +140,19 @@ function NoticeCard({ notice, onLeft }: { notice: Notice; onLeft?: () => void })
         onClick={() => dismissNotice(notice.id)}
       />
     </div>
+  )
+}
+
+/** A refused commit's notice: its whole output, or the agent to fix it. */
+function CommitBlockActions({ worktreeId, onSent }: { worktreeId: string; onSent: () => void }): React.JSX.Element {
+  const openDialog = useWorkspaceStore((state) => state.openDialog)
+  return (
+    <>
+      <Button size="sm" onClick={() => openDialog({ kind: 'commit-output', worktreeId })}>
+        Details
+      </Button>
+      <SendBlockToAgent worktreeId={worktreeId} variant="ghost" onSent={onSent} />
+    </>
   )
 }
 

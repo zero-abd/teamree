@@ -72,9 +72,11 @@ async function landChild(worktreeId: string): Promise<string | null> {
     const drafts = useCommitDrafts.getState()
     const message = shownDraft(drafts.drafts[worktreeId], suggestion).text
     if (message.trim() === '') return 'Needs a commit message'
+    useWorkspaceStore.getState().noteCommit(worktreeId)
     try {
       await runtimeClient.call('worktree.commit', { worktreeId, message, all: true })
     } catch (failure) {
+      useWorkspaceStore.getState().noteCommit(worktreeId, failure)
       return failure instanceof Error ? failure.message : String(failure)
     }
     drafts.setDraft(worktreeId, { text: '', seed: suggestion?.text ?? null })

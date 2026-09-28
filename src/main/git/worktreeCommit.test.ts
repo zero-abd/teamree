@@ -1,4 +1,4 @@
-import { mkdir, rm, symlink, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, rm, symlink, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { GitServiceError } from './errors'
@@ -214,5 +214,90 @@ describe('committing in a worktree', () => {
 
     expect(await repo.git(['log', '-1', '--format=%s'])).toBe('no typo in the subject')
     expect(await repo.git(['show', '--name-only', '--format=', 'HEAD'])).toBe('a.ts')
+  })
+
+  describe('a hook that refuses', () => {
+    /** Installs `script` as `name` in a hooks folder of the repo's own, whatever ~/.gitconfig says. */
+    const hook = async (repo: TempRepo, name: string, script: string): Promise<void> => {
+      const hooks = path.join(repo.base, 'hooks')
+      await mkdir(hooks, { recursive: true })
+      await writeFile(path.join(hooks, name), `#!/bin/sh\n${script}\n`)
+      await chmod(path.join(hooks, name), 0o755)
+      await repo.git(['config', 'core.hooksPath', hooks])
+    }
+    const refusal = async (promise: Promise<unknown>): Promise<GitServiceError> => {
+      const error = await promise.then(
+        () => null,
+        (thrown: unknown) => thrown
+      )
+      expect(error).toBeInstanceOf(GitServiceError)
+      return error as GitServiceError
+    }
+
+    it('names the hook and returns every line it printed, stdout and stderr', async () => {
+      const repo = await repository()
+      await hook(
+        repo,
+        'pre-commit',
+        [
+          'echo "lint: 3 problems (2 errors, 1 warning)"',
+          'echo "src/a.ts:1:7 error no-unused-vars"',
+          'echo "src/b.ts:4:2 error no-undef" >&2',
+          'echo "src/b.ts:9:1 warning eqeqeq"',
+          'exit 1'
+        ].join('\n')
+      )
+      await repo.write('a.ts', 'a\n')
+
+      const error = await refusal(commit(repo, { all: true }))
+
+      expect(error.message).toBe('pre-commit hook failed: lint: 3 problems (2 errors, 1 warning)')
+      expect(error.data).toEqual({
+        kind: 'hook',
+        hook: 'pre-commit',
+        output: [
+          'lint: 3 problems (2 errors, 1 warning)',
+          'src/a.ts:1:7 error no-unused-vars',
+          'src/b.ts:4:2 error no-undef',
+          'src/b.ts:9:1 warning eqeqeq'
+        ].join('\n')
+      })
+      expect(await repo.git(['log', '--format=%s'])).toBe('initial commit')
+    })
+
+    it('says which hook it was when the message hook refuses', async () => {
+      const repo = await repository()
+      await hook(repo, 'commit-msg', 'echo "subject must be imperative"\nexit 1')
+      await repo.write('a.ts', 'a\n')
+
+      const error = await refusal(commit(repo, { all: true }))
+
+      expect(error.data).toMatchObject({ kind: 'hook', hook: 'commit-msg', output: 'subject must be imperative' })
+    })
+
+    it('caps a long output, saying how much it left out', async () => {
+      const repo = await repository()
+      await hook(repo, 'pre-commit', 'i=1; while [ $i -le 450 ]; do echo "line $i"; i=$((i+1)); done; exit 1')
+      await repo.write('a.ts', 'a\n')
+
+      const error = await refusal(commit(repo, { all: true }))
+      const lines = (error.data as { output: string }).output.split('\n')
+
+      expect(lines).toHaveLength(201)
+      expect(lines[0]).toBe('line 1')
+      expect(lines[199]).toBe('line 200')
+      expect(lines[200]).toBe('… 250 more lines')
+    })
+
+    it('commits when the hook passes', async () => {
+      const repo = await repository()
+      await hook(repo, 'pre-commit', 'echo checked; exit 0')
+      await repo.write('a.ts', 'a\n')
+
+      const result = await commit(repo, { all: true, message: 'passes' })
+
+      expect(result.paths).toEqual(['a.ts'])
+      expect(await repo.git(['log', '-1', '--format=%s'])).toBe('passes')
+    })
   })
 })

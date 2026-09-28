@@ -7,6 +7,7 @@ import { useWorkspaceStore } from '../../state/workspaceStore'
 import { Button } from '../../ui/Button'
 import { Textarea } from '../../ui/Input'
 import { Menu, type MenuAnchor, type MenuItem } from '../../ui/Menu'
+import { CommitBlocked } from './CommitBlocked'
 import { useCommitDrafts, useCommitMessage } from './commitMessage'
 import type { LandOffer } from './landOffer'
 import { commitChoices, commitLabel, type CommitChoice, type Sections } from './sourceControl'
@@ -131,6 +132,7 @@ export function CommitBox({
           <Icon name="chevron-down" size={14} />
         </Button>
       </div>
+      <CommitBlocked worktreeId={worktreeId} />
       {menuAt === null ? null : (
         <Menu
           label="Commit Actions"

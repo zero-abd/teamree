@@ -183,6 +183,34 @@ describe('a worktree with uncommitted work', () => {
     expect(committed).toBeLessThan(merged)
   })
 
+  it('stops at a hook that refuses the commit, leaving its notice and lines in the Changes panel', async () => {
+    const refused = Object.assign(new Error('pre-commit hook failed: lint: 1 problem'), {
+      data: { kind: 'hook', hook: 'pre-commit', output: 'lint: 1 problem\nsrc/a.ts:1:1 error' }
+    })
+    call.mockImplementation((method: unknown, params: unknown) => {
+      if (method === 'worktree.commit') return Promise.reject(refused)
+      if (method === 'worktree.mergeIntoBase') return Promise.resolve(plan)
+      if (method === 'worktree.changes' && (params as { base?: boolean }).base === true) return Promise.resolve(branch)
+      return new Promise(() => {})
+    })
+    render(<ConfirmMergeDialog worktreeId="w1" />)
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'Commit message' }), { target: { value: 'Add usage' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Commit & Merge' }))
+
+    await waitFor(() => expect(useWorkspaceStore.getState().dialog).toBeNull())
+    const state = useWorkspaceStore.getState()
+    expect(state.commitBlocks.w1).toEqual({ hook: 'pre-commit', output: 'lint: 1 problem\nsrc/a.ts:1:1 error' })
+    expect(state.notices.map((notice) => notice.text)).toEqual([
+      'Commit blocked · pre-commit · fix typo: lint: 1 problem'
+    ])
+    expect(
+      call.mock.calls.some(
+        ([method, params]) => method === 'worktree.mergeIntoBase' && !(params as { dryRun?: boolean }).dryRun
+      )
+    ).toBe(false)
+  })
+
   // The Changes list stops at 500; the commit before the merge must take all 2,000.
   it('commits and merges past the list cap, counting every change', async () => {
     const listed = Array.from({ length: 500 }, (_, index) => ({

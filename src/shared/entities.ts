@@ -572,6 +572,9 @@ export type WorktreeResolve = { worktreeId: string; conflicts: string[] }
 /** `data` of a git error raised because another process holds the checkout's `index.lock`. */
 export type GitLockedData = { kind: 'locked'; lockPath: string }
 
+/** `data` of a commit a hook refused: the hook's name and what it printed, capped. */
+export type GitHookFailedData = { kind: 'hook'; hook: string; output: string }
+
 /** A checkout's `index.lock` as Clear Lock judges it: removable only with no git running there and not fresh. */
 export type WorktreeLock = { lockPath: string; exists: boolean; ageMs: number; gitRunning: boolean; clearable: boolean }
 

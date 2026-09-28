@@ -221,6 +221,26 @@ describe('a failed step', () => {
     expect(ran()).toEqual(['worktree.commit', 'worktree.push', 'worktree.push', 'worktree.createPullRequest'])
   })
 
+  it('closes on a hook that refuses the commit, leaving its notice and lines in the Changes panel', async () => {
+    seed({ upstream: null, unstaged: 1 }, { published: false })
+    answer({
+      'worktree.commit': () =>
+        Promise.reject(
+          Object.assign(new Error('pre-commit hook failed: lint'), {
+            data: { kind: 'hook', hook: 'pre-commit', output: 'lint\nsrc/a.ts:1:1 error' }
+          })
+        )
+    })
+    render(<CreatePullRequestDialog worktreeId="w1" />)
+    await waitFor(() => expect((screen.getByRole('textbox', { name: 'Title' }) as HTMLInputElement).value).not.toBe(''))
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Commit & Create' })))
+
+    await waitFor(() => expect(useWorkspaceStore.getState().dialog).toBeNull())
+    expect(ran()).toEqual(['worktree.commit'])
+    expect(useWorkspaceStore.getState().commitBlocks.w1?.hook).toBe('pre-commit')
+    expect(useWorkspaceStore.getState().notices.map((notice) => notice.commitBlock)).toEqual([{ worktreeId: 'w1' }])
+  })
+
   it('resumes at create when gh refused it', async () => {
     seed()
     let tries = 0

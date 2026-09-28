@@ -33,6 +33,7 @@ import { PushBaseDialog } from './dialogs/PushBaseDialog'
 import { ConfirmCleanUpDialog } from './dialogs/ConfirmCleanUpDialog'
 import { ConfirmKeepDialog } from './dialogs/ConfirmKeepDialog'
 import { ClearLockDialog } from './dialogs/ClearLockDialog'
+import { CommitOutputSheet } from './workspace/rightPanel/CommitBlocked'
 import { ConfirmRebaseDialog } from './dialogs/ConfirmRebaseDialog'
 import { MoveUnderDialog } from './dialogs/MoveUnderDialog'
 import { HandOffDialog } from './dialogs/HandOffDialog'
@@ -179,6 +180,7 @@ export function App(): React.JSX.Element {
         {dialog?.kind === 'clear-lock' ? (
           <ClearLockDialog worktreeId={dialog.worktreeId} lockPath={dialog.lockPath} />
         ) : null}
+        {dialog?.kind === 'commit-output' ? <CommitOutputSheet worktreeId={dialog.worktreeId} /> : null}
         {dialog?.kind === 'confirm-discard' ? (
           <ConfirmDiscardDialog
             worktreeId={dialog.worktreeId}
