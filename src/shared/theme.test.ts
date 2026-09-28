@@ -211,6 +211,13 @@ describe('light and dark', () => {
     expect(read.light).toEqual({ themeId: 'light', ground: null, accent: '#ff00ff', overrides: { line: '#123456' } })
     expect(sanitizeAppearance({ ...DEFAULT_APPEARANCE, mode: 'light' }).mode).toBe('light')
   })
+
+  it('keeps the project bar buttons choice, and leaves them shown when it is absent or not a yes or no', () => {
+    expect(DEFAULT_APPEARANCE.projectButtons).toBeUndefined()
+    expect(sanitizeAppearance({ ...DEFAULT_APPEARANCE, projectButtons: false }).projectButtons).toBe(false)
+    expect(sanitizeAppearance({ ...DEFAULT_APPEARANCE, projectButtons: true }).projectButtons).toBe(true)
+    expect(sanitizeAppearance({ ...DEFAULT_APPEARANCE, projectButtons: 'no' }).projectButtons).toBeUndefined()
+  })
 })
 
 describe('Charcoal', () => {

@@ -315,8 +315,8 @@
   padding: 0 7px var(--s2);
 }
 
-/* One 28px line: chevron and name, the base ref, then the team and the count, which New Task and ⋯ replace
-   under the pointer. Actions that would leave the name under 10ch drop to a second line. */
+/* One 28px line: chevron and name, the base ref, then the team, the count, New Task and ⋯. Actions that would
+   leave the name under 10ch drop to a second line. */
 .project__head {
   position: relative;
   display: flex;
@@ -375,15 +375,16 @@
   background: var(--bg-hover);
 }
 
-/* New Task and the project's menu, the one right-click opens: out of sight until the head is pointed at. */
-.project__new {
-  opacity: var(--row-action-rest);
+/* New Task and the project's menu, the one right-click opens: in sight at rest, full while the head is pointed at. */
+.project__new,
+.project__more {
+  opacity: var(--control-rest);
   transition: opacity var(--motion-fast) var(--ease);
 }
 
-.project__more {
+/* Appearance › Project Bar Buttons off: out of sight until the head is pointed at. */
+.sidebar--project-buttons-hover :is(.project__new, .project__more) {
   opacity: var(--row-action-rest);
-  transition: opacity var(--motion-fast) var(--ease);
 }
 
 .project__head:is(:hover, :focus-within) :is(.project__new, .project__more),
@@ -408,23 +409,28 @@
   white-space: nowrap;
 }
 
-/* Over the buttons' room at the head's end, drawn while they are not. */
 .project__count {
-  position: absolute;
-  top: 0;
-  right: 7px;
   color: var(--fg-muted);
   font-family: var(--font-mono);
   font-size: var(--text-xs);
   font-variant-numeric: tabular-nums;
   line-height: 28px;
   white-space: nowrap;
+}
+
+/* With the buttons under the pointer only: over their room at the head's end, drawn while they are not. */
+.sidebar--project-buttons-hover .project__count {
+  position: absolute;
+  top: 0;
+  right: 7px;
   pointer-events: none;
   opacity: calc(1 - var(--row-action-rest));
   transition: opacity var(--motion-fast) var(--ease);
 }
 
-.project__head:is(:hover, :focus-within, :has(.project__more[aria-expanded='true'])) .project__count {
+.sidebar--project-buttons-hover
+  .project__head:is(:hover, :focus-within, :has(.project__more[aria-expanded='true']))
+  .project__count {
   opacity: 0;
 }
 

@@ -228,18 +228,27 @@ describe('sidebar.css', () => {
 
   // Twelve identical marks down the list said nothing; the open row keeps its own. Right-click
   // and the menu key reach every row's menu.
-  it.each([
-    ['.worktree__action', '.worktree--active > .worktree__row > .worktree__action'],
-    ['.project__more', null],
-    ['.project__new', null]
-  ])('keeps %s out of sight at rest, but for the open row', (selector, active) => {
-    expect(declarationOf(ruleFor(SHEET, selector), 'opacity')).toBe('var(--row-action-rest)')
-    if (active !== null) expect(declarationOf(ruleFor(SHEET, active), 'opacity')).toBe('var(--control-rest)')
+  it('keeps a worktree row’s ⋯ out of sight at rest, but for the open row', () => {
+    expect(declarationOf(ruleFor(SHEET, '.worktree__action'), 'opacity')).toBe('var(--row-action-rest)')
+    expect(declarationOf(ruleFor(SHEET, '.worktree--active > .worktree__row > .worktree__action'), 'opacity')).toBe(
+      'var(--control-rest)'
+    )
   })
 
-  // The count stands where New Task and ⋯ appear, and gives way as they do, wherever nothing can hover too.
-  it('shows a project’s count at rest and its actions under the pointer, never both', () => {
+  // The owner wanted New Task and ⋯ on every project without hovering; Appearance can put them back under the pointer.
+  it('keeps a project’s New Task and ⋯ in sight at rest, the count in flow beside them', () => {
+    expect(declarationOf(ruleFor(SHEET, '.project__new,\n.project__more'), 'opacity')).toBe('var(--control-rest)')
     const count = ruleFor(SHEET, '.project__count')
+    expect(declarationOf(count, 'position')).toBeUndefined()
+    expect(declarationOf(count, 'opacity')).toBeUndefined()
+  })
+
+  // Off, the count stands where New Task and ⋯ appear, and gives way as they do, wherever nothing can hover too.
+  it('with the project bar buttons off, shows the count at rest and the actions under the pointer, never both', () => {
+    const hidden = ruleFor(SHEET, '.sidebar--project-buttons-hover :is(.project__new, .project__more)')
+    expect(declarationOf(hidden, 'opacity')).toBe('var(--row-action-rest)')
+    const count = ruleFor(SHEET, '.sidebar--project-buttons-hover .project__count')
+    expect(declarationOf(count, 'position')).toBe('absolute')
     expect(declarationOf(count, 'opacity')).toBe('calc(1 - var(--row-action-rest))')
     expect(declarationOf(count, 'pointer-events')).toBe('none')
   })

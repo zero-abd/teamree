@@ -77,8 +77,8 @@ export function setSidebarWidth(px) {
 }
 
 /**
- * What in each project head is drawn over something else or past its edge, as sentences; `[]` when
- * nothing is. Measured where the eye sees it: each box cut by the ancestors that clip it.
+ * What in each project head is drawn over something else, past its edge or out of sight, as sentences;
+ * `[]` when nothing is. Measured where the eye sees it: each box cut by the ancestors that clip it.
  */
 export function projectHeadCollisions() {
   return `(() => {
@@ -105,13 +105,18 @@ export function projectHeadCollisions() {
       const name = head.querySelector('.project__name')
       const words = [...head.querySelectorAll('.project__name, .project__base, .project__fresh, .project__unpushed')]
       const actions = [
-        ...head.querySelectorAll('.project__cue, .project__face, .project__teamwork'),
+        ...head.querySelectorAll('.project__cue, .project__face, .project__teamwork, .project__count'),
         ...[...head.querySelectorAll('button')].filter((button) => button.matches('.button--icon'))
       ]
       const said = (node) => (node.getAttribute('aria-label') ?? node.textContent).trim()
       for (const button of head.querySelectorAll('.button--icon')) {
         const width = button.getBoundingClientRect().width
         if (width < 21.5) found.push(said(button) + ' is squeezed to ' + Math.round(width) + 'px')
+        if (getComputedStyle(button).opacity === '0') found.push(said(button) + ' is out of sight at rest')
+        const count = head.querySelector('.project__count')
+        const box = seen(button, head)
+        const counted = count && seen(count, head)
+        if (box && counted && meets(box, counted)) found.push('the count is under ' + said(button))
       }
       for (const word of words) {
         const box = seen(word, head)

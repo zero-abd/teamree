@@ -121,6 +121,7 @@ export function Sidebar({
   const query = useSidebarView((state) => state.query)
   const quick = useSidebarView((state) => state.quick)
   const compact = useSidebarView((state) => state.compact)
+  const buttonsOnHover = useWorkspaceStore((state) => state.appearance.projectButtons === false)
   const openDone = useSidebarView((state) => state.openDone)
   const byAttention = useSidebarView((state) => state.byAttention)
   const view = useMemo(() => ({ query, quick, compact, openDone }), [query, quick, compact, openDone])
@@ -221,7 +222,9 @@ export function Sidebar({
 
   return (
     <div
-      className={`sidebar${pageOpen ? ' sidebar--page' : ''}${compact ? ' sidebar--compact' : ''}`}
+      className={`sidebar${pageOpen ? ' sidebar--page' : ''}${compact ? ' sidebar--compact' : ''}${
+        buttonsOnHover ? ' sidebar--project-buttons-hover' : ''
+      }`}
       data-region="sidebar"
     >
       {/* The top edge of the window, on this side of the seam: the lockup, and

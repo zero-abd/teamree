@@ -1758,6 +1758,52 @@ describe('the team at a glance', () => {
   })
 })
 
+// New Task and ⋯ stay in sight on every project, the count beside them; Appearance can put them back under the pointer.
+describe('a project header, drawn', () => {
+  const sheet = document.createElement('style')
+  sheet.textContent = readFileSync(path.join(import.meta.dirname, '../styles/sidebar.css'), 'utf8')
+  beforeAll(() => {
+    document.head.append(sheet)
+  })
+  afterAll(() => {
+    sheet.remove()
+  })
+
+  it('shows New Task and ⋯ at rest beside the count, or only under the pointer when Appearance says so', () => {
+    const opacity = (name: string): string => getComputedStyle(screen.getByRole('button', { name })).opacity
+    const count = (): CSSStyleDeclaration => getComputedStyle(document.querySelector('.project__count') as HTMLElement)
+    seed({ worktrees: [worktree()] })
+    mount()
+    expect(opacity('New Task in pager')).toBe('var(--control-rest)')
+    expect(opacity('More for pager')).toBe('var(--control-rest)')
+    expect(count().position).not.toBe('absolute')
+    expect(count().opacity).not.toContain('--row-action-rest')
+
+    act(() =>
+      useWorkspaceStore.setState({ appearance: { ...useWorkspaceStore.getState().appearance, projectButtons: false } })
+    )
+    expect(opacity('New Task in pager')).toBe('var(--row-action-rest)')
+    expect(opacity('More for pager')).toBe('var(--row-action-rest)')
+    expect(count().position).toBe('absolute')
+    expect(count().opacity).toBe('calc(1 - var(--row-action-rest))')
+
+    act(() =>
+      useWorkspaceStore.setState({ appearance: { ...useWorkspaceStore.getState().appearance, projectButtons: true } })
+    )
+    expect(opacity('New Task in pager')).toBe('var(--control-rest)')
+  })
+
+  it('leaves a worktree row’s ⋯ under the pointer whichever way the project’s buttons are set', () => {
+    for (const projectButtons of [true, false]) {
+      seed({ worktrees: [worktree()], appearance: { ...INITIAL.appearance, projectButtons } })
+      mount()
+      const more = document.querySelector('.worktree__action') as HTMLElement
+      expect(getComputedStyle(more).opacity).toBe('var(--row-action-rest)')
+      cleanup()
+    }
+  })
+})
+
 // One column to scan for state, and one mark for the open row; the row's `⋯` shows where the pointer or focus is.
 describe('a worktree row, read at a glance', () => {
   const sheet = document.createElement('style')

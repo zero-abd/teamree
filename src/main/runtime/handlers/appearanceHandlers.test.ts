@@ -41,6 +41,18 @@ describe('appearance.set', () => {
     expect(told[0]?.mode).toBe('light')
   })
 
+  it('stores the project bar buttons choice, and reads it back after a restart', async () => {
+    registerAppearanceHandlers(registry)
+    const params = { ...CHOICE, projectButtons: false }
+
+    const response = await createDispatcher(registry)({ id: 'a3', method: 'appearance.set', params }, call)
+
+    expect(response).toMatchObject({ ok: true, result: { projectButtons: false } })
+    await registry.context.store.flush()
+    const reopened = await WorkspaceStore.open(join(directory, 'workspace.json'))
+    expect(reopened.getAppearance().projectButtons).toBe(false)
+  })
+
   it('refuses a mode it does not know', async () => {
     registerAppearanceHandlers(registry)
     const response = await createDispatcher(registry)(
