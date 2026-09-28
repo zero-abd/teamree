@@ -8,6 +8,7 @@ import { isCommandAvailable, paneNumberTarget, runWorkspaceCommand, whyUnavailab
 import { WORKSPACE_SHORTCUTS, type WorkspaceCommand } from './workspaceShortcuts'
 import { onRegionRequest, type Region } from '../shell/regions'
 import { showPane } from '../terminal/shownPanes'
+import { registerAskCard } from '../panes/askCards'
 import { resolvePlatformModifier } from './platformModifier'
 import { commandForEvent } from './workspaceShortcuts'
 import { useSettingsFind } from '../settings/settingsFind'
@@ -361,6 +362,16 @@ describe('going to what needs you', () => {
     await vi.waitFor(() => expect(regions).toEqual(['panes']))
     stop()
     expect(store.revealPane).toHaveBeenCalledWith('w1', 't2')
+  })
+
+  // #529: the keyboard lands on the answer, not on the terminal under the card.
+  it('hands an asking card’s first answer the keyboard', async () => {
+    const focus = vi.fn()
+    const card = { querySelector: () => ({ focus }) } as unknown as HTMLElement
+    const unregister = registerAskCard('t2', card)
+    runWorkspaceCommand('next-needing', workspace({ ...TWO_PANES, terminals: { t2: asking } }))
+    await vi.waitFor(() => expect(focus).toHaveBeenCalledOnce())
+    unregister()
   })
 })
 

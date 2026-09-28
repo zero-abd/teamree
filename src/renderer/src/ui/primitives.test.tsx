@@ -310,6 +310,13 @@ describe('EmptyState', () => {
     expect(screen.getByRole('heading', { name: 'No worktrees yet' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'New Task' }).className).toContain('button--primary')
   })
+
+  // A panel or a list is not a page: the same mark and title, a step smaller.
+  it('draws smaller inside a panel', () => {
+    const { container } = render(<EmptyState title="No changes" compact />)
+    expect(container.querySelector('.empty-state')?.className).toContain('empty-state--compact')
+    expect(container.querySelector('.empty-state__motif svg')?.getAttribute('width')).toBe('32')
+  })
 })
 
 describe('PageHeader', () => {

@@ -334,7 +334,9 @@ function paneItems(context: PaletteContext): PaletteItem[] {
             kind: 'pane',
             id: terminal.id,
             worktreeId: worktree.id,
-            label: name === where ? name : `${name} · ${where}`,
+            // The task's own pane is called after its worktree: its agent says what the row is.
+            label:
+              name !== where ? `${name} · ${where}` : agent === undefined ? name : `${harnessName(agent)} · ${where}`,
             hint: '',
             detail: project,
             search: `${name} ${where} ${terminal.title} ${agent === undefined ? '' : harnessName(agent)} ${project}`,

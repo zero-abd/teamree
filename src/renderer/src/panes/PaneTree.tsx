@@ -10,6 +10,8 @@ import { minExtent, type Box } from '@shared/paneRoom'
 import type { PlatformModifier } from '../keyboard/platformModifier'
 import { paneNamesById } from '../sidebar/agentRows'
 import type { WorktreeNameSource } from '../sidebar/worktreeDisplay'
+import { scrollShownPane } from '../terminal/shownPanes'
+import { requestRegionFocus } from '../shell/regions'
 import { TerminalView } from '../terminal/TerminalView'
 import { usePaneMenu } from '../workspace/paneMenu'
 import { GroupStrip } from '../workspace/TerminalTabs'
@@ -206,7 +208,15 @@ function PaneLeaf({
       onKeyDownCapture={ended ? (event) => endedKeys(event, primary) : undefined}
     >
       {stage === 'asking' && terminal !== undefined ? (
-        <PaneAsk terminal={terminal} onReview={() => onFocus(terminalId)} />
+        <PaneAsk
+          terminal={terminal}
+          onReview={() => {
+            // Already focused, a focus call alone did nothing: bring the question at the bottom into view.
+            onFocus(terminalId)
+            scrollShownPane(terminalId)
+            requestRegionFocus('panes')
+          }}
+        />
       ) : null}
       {stage === 'starting' && terminal !== undefined ? <PaneStarting terminal={terminal} /> : null}
       {stage === null && terminal?.label === 'setup' ? <SetupMissingTool terminal={terminal} /> : null}

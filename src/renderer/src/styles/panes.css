@@ -715,8 +715,9 @@ body.is-dragging-pane * {
   color: var(--fg);
 }
 
-/* The lifecycle: nothing here resizes the terminal while its program runs. The ask card and the starting
-   shimmer float; the footer is there for the whole life of an agent; the end block only once it is gone. */
+/* The lifecycle. The starting shimmer floats; the ask card takes a row of its own at the top, so it never
+   hides the output it asks about; the footer is there for the whole life of an agent; the end block only
+   once it is gone. */
 .pane-starting {
   position: absolute;
   z-index: 11;
@@ -745,11 +746,8 @@ body.is-dragging-pane * {
 }
 
 .pane-state {
-  position: absolute;
-  z-index: 11;
-  top: var(--s3);
-  right: var(--s3);
-  left: var(--s3);
+  flex: none;
+  margin: var(--s2) var(--s3) var(--s1);
   display: grid;
   grid-template-columns: 18px minmax(0, 1fr) auto;
   align-items: center;
@@ -809,7 +807,25 @@ body.is-dragging-pane * {
 
 .pane-state__actions {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 6px;
+}
+
+/* A question put to you: its words in full ink, up to two lines. */
+.pane-state__meta--question {
+  display: -webkit-box;
+  color: var(--fg);
+  font-size: var(--text-sm);
+  white-space: normal;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.pane-state__field {
+  width: 180px;
+  height: var(--control-sm);
+  font-size: var(--text-sm);
 }
 
 .pane-foot {

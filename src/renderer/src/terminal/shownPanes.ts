@@ -6,7 +6,7 @@ type Buffer = {
   length: number
   getLine: (row: number) => { isWrapped: boolean; translateToString: (trimRight?: boolean) => string } | undefined
 }
-type Shown = { buffer: { active: Buffer }; clear: () => void }
+type Shown = { buffer: { active: Buffer }; clear: () => void; scrollToBottom?: () => void }
 
 /** An emulator's rows as lines, and whether a full-screen program has the alternate screen. */
 export type PaneScreen = { rows: string[]; alternate: boolean }
@@ -24,6 +24,11 @@ export function showPane(terminalId: string, term: Shown): () => void {
 /** Clears a mounted pane's scrollback and screen, keeping the cursor's line, for every reader of the pane. */
 export function clearShownPane(terminalId: string): void {
   shown.get(terminalId)?.clear()
+}
+
+/** Scrolls a mounted pane to its last line, where an asking agent's question is. */
+export function scrollShownPane(terminalId: string): void {
+  shown.get(terminalId)?.scrollToBottom?.()
 }
 
 /** The pane's scrollback and screen as text, wrapped rows joined; null when it is not mounted. */

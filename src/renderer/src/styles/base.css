@@ -915,6 +915,20 @@ kbd {
   letter-spacing: -0.025em;
 }
 
+.empty-state--compact .empty-state__motif {
+  width: 52px;
+  height: 46px;
+  margin-bottom: var(--s3);
+  border-radius: var(--r3);
+}
+
+.empty-state--compact .empty-state__title {
+  font-size: var(--text-lg);
+  font-weight: 650;
+  line-height: 20px;
+  letter-spacing: -0.015em;
+}
+
 .empty-state__hint {
   margin-top: 5px;
   color: var(--fg-muted);
