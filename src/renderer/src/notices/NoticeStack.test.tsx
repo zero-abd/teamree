@@ -149,3 +149,59 @@ describe('the words on a card', () => {
     expect(noticeLook({ tone: 'info' })).toBe('neutral')
   })
 })
+
+describe('an agent asking out of sight', () => {
+  const asking = {
+    id: 'term_b',
+    worktreeId: 'w2',
+    title: 'claude',
+    cwd: '/w',
+    shell: '/bin/zsh',
+    cols: 80,
+    rows: 24,
+    running: true,
+    busy: false,
+    lastOutputAt: 0,
+    agent: 'claude' as const,
+    agentEvent: {
+      event: 'Notification' as const,
+      at: 5,
+      detail: 'permission_prompt',
+      message: 'Claude needs your permission to use Bash'
+    },
+    screenMenu: { prompt: 'p', choices: [{ label: 'Yes', keys: ['1'] }] }
+  }
+  const setAsking = (overrides: Record<string, unknown> = {}): void =>
+    useWorkspaceStore.setState({
+      terminals: { term_b: asking },
+      worktrees: [{ id: 'w2', name: 'payment retries' } as never],
+      layouts: { w2: { worktreeId: 'w2', root: { kind: 'leaf', terminalId: 'term_b' }, focusedTerminalId: 'term_b' } },
+      activeWorktreeId: 'w1',
+      ...overrides
+    })
+
+  it('gets a card with the question, Allow for the first answer and Open for the pane', () => {
+    const answerPane = vi.fn(async () => {})
+    const revealPane = vi.fn(async () => {})
+    setAsking({ answerPane, revealPane })
+    render(<NoticeStack />)
+    const notice = card('payment retries needs you')
+    expect(notice.className).toContain('notice--asking')
+    expect(within(notice).getByText('Permission to use Bash')).toBeTruthy()
+    fireEvent.click(within(notice).getByRole('button', { name: 'Allow' }))
+    expect(answerPane).toHaveBeenCalledWith('term_b', { label: 'Yes', keys: ['1'] })
+    fireEvent.click(within(notice).getByRole('button', { name: 'Open' }))
+    expect(revealPane).toHaveBeenCalledWith('w2', 'term_b')
+  })
+
+  it('draws none while its pane is on screen, and none once dismissed', () => {
+    setAsking({ activeWorktreeId: 'w2' })
+    render(<NoticeStack />)
+    expect(screen.queryByText('payment retries needs you')).toBeNull()
+    cleanup()
+    setAsking()
+    render(<NoticeStack />)
+    fireEvent.click(within(card('payment retries needs you')).getByRole('button', { name: 'Dismiss message' }))
+    expect(screen.queryByText('payment retries needs you')).toBeNull()
+  })
+})

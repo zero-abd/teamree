@@ -104,7 +104,7 @@ describe('paneTabs', () => {
       )
     )
 
-    expect(tabs.map((tab) => tab.activity)).toEqual(['working', 'quiet', 'done', 'failed'])
+    expect(tabs.map((tab) => tab.activity)).toEqual(['working', 'quiet', 'stopped', 'failed'])
   })
 
   // The strip is the other half of the same answer: a sidebar that numbers its
@@ -177,7 +177,8 @@ describe('paneTabs', () => {
     }
     const again = terminal({ id: 'again', agent: 'claude', ordinal: 1 })
     const [alone] = paneTabs(leaf('again'), byId(again), task)
-    expect(alone).toMatchObject({ label: task.task, text: task.task })
+    // The header over the strip already says the task; the tab says the agent (no label repeats).
+    expect(alone).toMatchObject({ label: task.task, text: 'Claude Code' })
 
     const second = terminal({ id: 'second', agent: 'claude', ordinal: 2 })
     const both = paneTabs(row('again', 'second'), byId(again, second), task)
@@ -199,7 +200,7 @@ describe('paneTabTitle', () => {
       leaf('d'),
       byId(terminal({ id: 'd', label: 'dev', run: 'dev', running: false, exitCode: 129 }))
     )
-    expect(tab && paneTabTitle(tab)).toBe('dev · stopped')
+    expect(tab && paneTabTitle(tab)).toBe('dev · ended')
   })
 
   it('says the name alone while nothing is known about the pane', () => {
@@ -295,7 +296,7 @@ describe('file tabs', () => {
   })
 
   // `startTask` labels the agent's pane with the stored name, cut to "Add a subtract function to claude".
-  it('calls the pane named after its worktree by the worktree title', () => {
+  it('calls the pane named after its worktree by the worktree title, and draws its agent on the tab', () => {
     const worktree = {
       name: 'Add a subtract function to claude',
       branch: 'add-a-subtract-function-to-claude',
@@ -307,6 +308,7 @@ describe('file tabs', () => {
       worktree
     )
 
-    expect(tabs.map((tab) => tab.text)).toEqual(['Add a subtract function to src/math.ts', 'bash'])
+    expect(tabs.map((tab) => tab.label)).toEqual(['Add a subtract function to src/math.ts', 'bash'])
+    expect(tabs.map((tab) => tab.text)).toEqual(['Claude Code', 'bash'])
   })
 })

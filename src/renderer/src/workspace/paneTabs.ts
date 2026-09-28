@@ -5,7 +5,7 @@ import type { AgentKind, PaneNode, Terminal } from '@shared/entities'
 import { fileTabName, isFileColumn, isFileLeaf } from '@shared/filePane'
 import { collectLeaves } from '../panes/paneLayout'
 import {
-  activityOf,
+  shownActivity,
   dotTone,
   paneAgent,
   paneNamesById,
@@ -13,7 +13,8 @@ import {
   type AgentActivity,
   type PaneNameSource
 } from '../sidebar/agentRows'
-import type { WorktreeNameSource } from '../sidebar/worktreeDisplay'
+import { worktreeDisplay, type WorktreeNameSource } from '../sidebar/worktreeDisplay'
+import { harnessName } from '../agents/harnesses'
 
 export type PaneTab = {
   terminalId: string
@@ -43,6 +44,7 @@ export function paneTabs(
     worktree
   )
   const previews = new Set(previewsIn(root))
+  const title = worktree === undefined ? undefined : worktreeDisplay(worktree).title
   return leaves.map((node) => {
     if (isFileLeaf(node)) {
       const label = fileTabName(node)
@@ -59,8 +61,11 @@ export function paneTabs(
     const record = terminals[node.terminalId]
     const pane = record ?? UNARRIVED
     const label = names[node.terminalId] ?? 'terminal'
-    const activity = record ? activityOf(record) : null
-    return { terminalId: node.terminalId, agent: paneAgent(pane), label, text: label, activity }
+    const activity = record ? shownActivity(record) : null
+    const agent = paneAgent(pane)
+    // The task's own pane is named after its worktree, which the header over the strip says: its tab says the agent.
+    const text = agent !== undefined && label === title ? harnessName(agent) : label
+    return { terminalId: node.terminalId, agent, label, text, activity }
   })
 }
 

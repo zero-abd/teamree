@@ -166,12 +166,13 @@ export function PaneRows({
   )
 }
 
-/** The row's time slot, which stands in for a dot: the state word in its tone when the pane needs you, else the age. */
+/** The row's time slot, which stands in for a dot: the state word when the pane needs you or has ended, else the age. */
 export function PaneSince({ tone, quietFor }: { tone: DotTone; quietFor: number }): React.JSX.Element {
-  const needsYou = tone === 'waiting' || tone === 'failed'
+  // An ended pane has no age worth reading: it says ended, as its pane and tab do.
+  const worded = tone === 'waiting' || tone === 'failed' || tone === 'stopped'
   return (
-    <span className={needsYou ? `pane-row__since pane-row__since--${tone}` : 'pane-row__since'}>
-      {needsYou ? TONE_LABEL[tone] : sinceLabel(quietFor)}
+    <span className={worded ? `pane-row__since pane-row__since--${tone}` : 'pane-row__since'}>
+      {worded ? TONE_LABEL[tone] : sinceLabel(quietFor)}
     </span>
   )
 }

@@ -41,7 +41,7 @@ export const TONE_LABEL: Record<DotTone, string> = {
   working: 'working',
   quiet: 'ready',
   idle: 'idle',
-  stopped: 'stopped',
+  stopped: 'ended',
   done: 'finished'
 }
 
@@ -104,7 +104,7 @@ export function agentRows(
   const names = paneNames(mine, source)
   return mine.map((terminal, index) => {
     const label = names[index] ?? paneName(terminal)
-    const activity = activityOf(terminal)
+    const activity = shownActivity(terminal)
     const read = evidence[terminal.id] ?? null
     const line = rowLine(activity === 'waiting' ? askingLine(read, terminal.agentEvent) : read, terminal, label, source)
     const choices = activity === 'waiting' ? terminal.screenMenu?.choices : undefined
@@ -120,6 +120,17 @@ export function agentRows(
       ...(terminal.subagents === undefined ? {} : { subagents: terminal.subagents })
     }
   })
+}
+
+/** What a ^C exit reads as: the person stopped it, nothing failed. */
+const INTERRUPTED = 130
+
+/** `activityOf` as the pane draws it (`paneStage`): a clean exit, a ^C and a restore all ended. */
+export function shownActivity(terminal: Terminal): AgentActivity {
+  const activity = activityOf(terminal)
+  if (terminal.running) return activity
+  if (terminal.restored === 'stopped' || activity === 'done' || terminal.exitCode === INTERRUPTED) return 'stopped'
+  return activity
 }
 
 /** An asking pane's line: never an answer or a key hint; the hook's words when the screen has nothing better. */

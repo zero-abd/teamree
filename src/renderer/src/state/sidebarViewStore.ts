@@ -1,4 +1,4 @@
-// The sidebar's view: its filter, chips, Compact and unfolded done rows, kept for this window in
+// The sidebar's view: its filter, chips, Compact, unfolded done rows and sorted projects, kept for this window in
 // `localStorage`; plus the requests other surfaces make of it (reveal a row, focus the filter).
 
 import { create } from 'zustand'
@@ -6,9 +6,10 @@ import { QUICK_FILTERS, type QuickFilter, type SidebarView } from '../sidebar/si
 
 const VIEW_KEY = 'teamree.sidebar.view'
 
-export type StoredSidebarView = SidebarView
+/** `byAttention`: projects whose rows Sort by Attention orders. */
+export type StoredSidebarView = SidebarView & { byAttention: string[] }
 
-const EMPTY: StoredSidebarView = { query: '', quick: [], compact: false, openDone: [] }
+const EMPTY: StoredSidebarView = { query: '', quick: [], compact: false, openDone: [], byAttention: [] }
 
 export function readStoredSidebarView(storage: Pick<Storage, 'getItem'> | undefined): StoredSidebarView {
   try {
@@ -20,7 +21,8 @@ export function readStoredSidebarView(storage: Pick<Storage, 'getItem'> | undefi
       query: typeof fields.query === 'string' ? fields.query : '',
       quick: strings(fields.quick).filter((chip): chip is QuickFilter => known.has(chip)),
       compact: fields.compact === true,
-      openDone: strings(fields.openDone)
+      openDone: strings(fields.openDone),
+      byAttention: strings(fields.byAttention)
     }
   } catch {
     return EMPTY
@@ -29,8 +31,8 @@ export function readStoredSidebarView(storage: Pick<Storage, 'getItem'> | undefi
 
 export function writeStoredSidebarView(storage: Pick<Storage, 'setItem'> | undefined, view: StoredSidebarView): void {
   try {
-    const { query, quick, compact, openDone } = view
-    storage?.setItem(VIEW_KEY, JSON.stringify({ query, quick, compact, openDone }))
+    const { query, quick, compact, openDone, byAttention } = view
+    storage?.setItem(VIEW_KEY, JSON.stringify({ query, quick, compact, openDone, byAttention }))
   } catch {
     // Storage full or blocked: the view holds until the window closes.
   }
@@ -55,6 +57,7 @@ type SidebarViewState = StoredSidebarView & {
   toggleQuick: (chip: QuickFilter) => void
   setCompact: (compact: boolean) => void
   toggleDone: (projectId: string) => void
+  toggleAttention: (projectId: string) => void
   reveal: (worktreeId: string) => void
   askFilter: () => void
   filterTaken: () => void
@@ -89,6 +92,14 @@ export const useSidebarView = create<SidebarViewState>()((set, get) => {
         openDone: openDone.includes(projectId)
           ? openDone.filter((entry) => entry !== projectId)
           : [...openDone, projectId]
+      })
+    },
+    toggleAttention(projectId) {
+      const { byAttention } = get()
+      save({
+        byAttention: byAttention.includes(projectId)
+          ? byAttention.filter((entry) => entry !== projectId)
+          : [...byAttention, projectId]
       })
     },
     reveal: (worktreeId) => set((state) => ({ revealSeq: state.revealSeq + 1, picked: worktreeId })),

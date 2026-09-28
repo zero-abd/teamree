@@ -182,7 +182,9 @@ describe('stylesheets', () => {
         '.mini-window__tree--asking',
         // The status pill and the notice of an agent that is asking.
         '.status--asking',
-        '.toast--asking::before'
+        '.toast--asking::before',
+        '.notice--asking::before',
+        '.notice--asking .notice__icon'
       ])
       const elsewhere: string[] = []
       for (const name of sheets) {

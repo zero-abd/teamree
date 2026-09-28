@@ -49,4 +49,17 @@ describe('notices.css', () => {
   it('keeps the close control out of sight at rest, where something can hover', () => {
     expect(declarationOf(ruleFor(SHEET, '.notice__close'), 'opacity')).toBe('var(--row-action-rest)')
   })
+
+  // An agent asking out of sight: amber, the one tone that means asking, on its edge and its icon.
+  it('edges an asking card in amber and quotes its ask on one line', () => {
+    expect(declarationOf(ruleFor(SHEET, '.notice--asking::before'), 'background')).toBe('var(--warning)')
+    expect(declarationOf(ruleFor(SHEET, '.notice--asking .notice__icon'), 'color')).toBe('var(--warning)')
+    expect(declarationOf(ruleFor(SHEET, '.notice__detail--ask'), 'white-space')).toBe('nowrap')
+  })
+
+  // A teammate's popup answered in the same buttons as every other card: one filled, the rest ghost.
+  it('fills a popup’s first action and leaves the rest ghost', () => {
+    expect(declarationOf(ruleFor(SHEET, '.notice__action'), 'background')).toBe('transparent')
+    expect(declarationOf(ruleFor(SHEET, '.notice__text + .notice__action'), 'background')).toBe('var(--accent)')
+  })
 })

@@ -1,15 +1,19 @@
-// The corner stack above the status bar: teammates' popups, this window's notices, then the update card.
+// The corner stack above the status bar: teammates' popups, agents asking out of sight, this window's notices,
+// then the update card.
 // A dismissed notice slides out in place before it goes, so the stack closes the gap rather than jumping.
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { copyText } from '../clipboard/clipboard'
 import { Icon } from '../icons/Icon'
 import { Button, IconButton } from '../ui/Button'
 import { openInBrowser } from '../shell/openInBrowser'
+import { requestRegionFocus } from '../shell/regions'
+import { usePaneEvidence } from '../sidebar/usePaneEvidence'
 import { useWorkspaceStore, type Notice } from '../state/workspaceStore'
 import { HandoffPopups } from '../teamwork/HandoffPopups'
 import { SharedNotePopups } from '../teamwork/SharedNotePopups'
 import { UpdateAvailableCard } from '../updates/UpdateAvailableCard'
+import { hiddenAsks, type HiddenAsk } from './askingNotices'
 import { NOTICE_ICON, noticeLook, noticeParts } from './noticeView'
 import { useAnnouncements } from './useAnnouncements'
 
@@ -27,6 +31,7 @@ export function NoticeStack(): React.JSX.Element {
     <div className="corner-stack">
       <SharedNotePopups />
       <HandoffPopups />
+      <AskingCards />
       {/* Always mounted: a live region added with its first message is often not heard saying it. */}
       <div className="notices" role="status" aria-live="polite">
         <span className="notices__spoken" key={spoken.serial}>
@@ -151,5 +156,78 @@ function LockActions({ lock }: { lock: NonNullable<Notice['lock']> }): React.JSX
         </Button>
       ) : null}
     </>
+  )
+}
+
+/** A card per agent asking where it cannot be seen; one it was dismissed for comes back with the next question. */
+function AskingCards(): React.JSX.Element | null {
+  const terminals = useWorkspaceStore((store) => store.terminals)
+  const worktrees = useWorkspaceStore((store) => store.worktrees)
+  const layouts = useWorkspaceStore((store) => store.layouts)
+  const activeWorktreeId = useWorkspaceStore((store) => store.activeWorktreeId)
+  const expandedTerminalId = useWorkspaceStore((store) => store.expandedTerminalId)
+  const focusedWatchId = useWorkspaceStore((store) => store.focusedWatchId)
+  const covered = useWorkspaceStore(
+    (store) => store.settingsOpen || store.helpOpen || store.dashboardOpen || store.teamworkProjectId !== null
+  )
+  const state = useMemo(
+    () => ({ terminals, worktrees, layouts, activeWorktreeId, expandedTerminalId, focusedWatchId, covered }),
+    [terminals, worktrees, layouts, activeWorktreeId, expandedTerminalId, focusedWatchId, covered]
+  )
+  const asks = useMemo(() => hiddenAsks(state), [state])
+  const askingPanes = useMemo(() => asks.map((ask) => ask.terminal), [asks])
+  const evidence = usePaneEvidence(askingPanes, state.terminals)
+  const [dismissed, setDismissed] = useState<ReadonlySet<string>>(new Set())
+  const shown = hiddenAsks(state, evidence).filter((ask) => !dismissed.has(ask.key))
+  if (shown.length === 0) return null
+  return (
+    <div className="notices notices--asking">
+      {shown.map((ask) => (
+        <AskingCard
+          key={ask.terminal.id}
+          ask={ask}
+          onDismiss={() => setDismissed((current) => new Set(current).add(ask.key))}
+        />
+      ))}
+    </div>
+  )
+}
+
+function AskingCard({ ask, onDismiss }: { ask: HiddenAsk; onDismiss: () => void }): React.JSX.Element {
+  const answerPane = useWorkspaceStore((state) => state.answerPane)
+  const revealPane = useWorkspaceStore((state) => state.revealPane)
+  const { terminal } = ask
+  const allow = terminal.screenMenu?.choices[0]
+  return (
+    <div className="notice notice--asking" role="group" aria-label={`${ask.worktreeName} needs you`}>
+      <span className="notice__icon" aria-hidden="true">
+        <Icon name="alert" />
+      </span>
+      <div className="notice__body">
+        <p className="notice__title">{`${ask.worktreeName} needs you`}</p>
+        {ask.question === null ? null : (
+          <p className="notice__detail notice__detail--ask" title={ask.question}>
+            {ask.question}
+          </p>
+        )}
+        <div className="notice__actions">
+          {allow === undefined ? null : (
+            <Button variant="primary" size="sm" title={allow.label} onClick={() => void answerPane(terminal.id, allow)}>
+              Allow
+            </Button>
+          )}
+          <Button
+            variant={allow === undefined ? 'primary' : 'ghost'}
+            size="sm"
+            onClick={() =>
+              void Promise.resolve(revealPane(terminal.worktreeId, terminal.id)).then(() => requestRegionFocus('panes'))
+            }
+          >
+            Open
+          </Button>
+        </div>
+      </div>
+      <IconButton icon="close" label="Dismiss message" className="notice__close" onClick={onDismiss} />
+    </div>
   )
 }

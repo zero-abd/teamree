@@ -65,6 +65,12 @@
   font-size: var(--text-sm);
 }
 
+/* No worktree open: only the window's drag edge, over the page's own ground. */
+.workspace__head--bare {
+  border-bottom-color: transparent;
+  background: transparent;
+}
+
 .workspace__name {
   flex: none;
   max-width: 40%;
@@ -344,15 +350,24 @@
   background: transparent;
   color: var(--fg-muted);
   cursor: pointer;
+}
+
+.tab__close {
   opacity: var(--control-rest);
 }
 
-.tab:hover .tab__rename,
+/* Double-click renames too, so the pencil waits for the pointer or the keys. */
+.tab__rename {
+  opacity: var(--row-action-rest);
+}
+
 .tab:hover .tab__close,
-.tab--active .tab__rename,
 .tab--active .tab__close,
-.tab__rename:focus-visible,
 .tab__close:focus-visible {
+  opacity: 1;
+}
+
+.tab:is(:hover, :focus-within) .tab__rename {
   opacity: 1;
 }
 

@@ -220,10 +220,10 @@ describe('sidebar.css', () => {
     expect(declarationOf(ruleFor(SHEET, '.worktree__tally'), 'margin-left')).toBe('auto')
   })
 
-  // With the branch left out, `long notes index` folded both its chips into `+2`.
-  it('wraps a title line’s chips under the name, except on a compact row', () => {
-    expect(declarationOf(ruleFor(SHEET, '.worktree__title'), 'flex-wrap')).toBe('wrap')
-    expect(declarationOf(ruleFor(SHEET, '.sidebar--compact .worktree__title'), 'flex-wrap')).toBe('nowrap')
+  // Wrapped chips made a box a line taller than its neighbours; they fold into `⋯` instead.
+  it('keeps a title line to one line, folding its chips', () => {
+    expect(declarationOf(ruleFor(SHEET, '.worktree__title'), 'flex-wrap')).toBe('nowrap')
+    expect(declarationOf(ruleFor(SHEET, '.worktree'), 'padding')).toBe('4px 3px 4px 0')
   })
 
   // Twelve identical marks down the list said nothing; the open row keeps its own. Right-click
@@ -281,5 +281,12 @@ describe('sidebar.css', () => {
         hiding.push(rule.selector)
     })
     expect(hiding).toEqual([])
+  })
+
+  // A question squeezed to `W…` in Compact, and three lines of it in a box, both cost the list (#529, #534).
+  it('keeps a question to one line, and most of a compact line', () => {
+    expect(declarationOf(ruleFor(SHEET, '.worktree__ask-text'), 'white-space')).toBe('nowrap')
+    expect(declarationOf(ruleFor(SHEET, '.worktree__ask--compact .worktree__ask-text'), 'flex')).toBe('1 0 60%')
+    expect(declarationOf(ruleFor(SHEET, '.worktree__ask--compact .answers'), 'overflow')).toBe('hidden')
   })
 })

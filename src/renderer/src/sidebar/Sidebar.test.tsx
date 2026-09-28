@@ -40,6 +40,7 @@ const { NEST_DRAG_TYPE, endNestDrag } = await import('./nestDrag')
 const { useSharedNotes } = await import('../teamwork/sharedNotesStore')
 const { useHandoffs } = await import('../teamwork/handoffsStore')
 const { useTeamFold } = await import('./teamFold')
+const { useSidebarView } = await import('../state/sidebarViewStore')
 
 const INITIAL = useWorkspaceStore.getState()
 const NOW = Date.now()
@@ -1245,6 +1246,20 @@ describe('starting a task in any project from the keyboard', () => {
     fireEvent.contextMenu(projectRow('ledger'), { clientX: 40, clientY: 60, detail: 1 })
     fireEvent.click(screen.getByRole('menuitem', { name: 'Move to Trash…' }))
     expect(useWorkspaceStore.getState().dialog).toEqual({ kind: 'confirm-trash-project', projectId: 'p2' })
+  })
+
+  // Twenty tasks: the ones that need you on top, per project, remembered (#534).
+  it('sorts a project by attention from its menu, and says so while it is on', () => {
+    const item = (): HTMLElement => {
+      fireEvent.contextMenu(projectRow('ledger'), { clientX: 40, clientY: 60, detail: 1 })
+      return screen.getByRole('menuitem', { name: /^Sort by Attention/ })
+    }
+    expect(item().textContent).toBe('Sort by Attention')
+    fireEvent.click(item())
+    expect(useSidebarView.getState().byAttention).toEqual(['p2'])
+    expect(item().textContent).toBe('Sort by AttentionOn')
+    fireEvent.click(item())
+    expect(useSidebarView.getState().byAttention).toEqual([])
   })
 
   it('reaches the project’s Teamwork page from its menu, with or without a task in it', () => {

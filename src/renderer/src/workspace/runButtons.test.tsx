@@ -116,6 +116,8 @@ describe('RunButtons', () => {
       'Run Tests'
     ])
     expect(screen.getByRole('button', { name: 'Run Tests' }).title).toBe('Run Tests · npm test')
+    // Says the verb, as the menu and the palette do.
+    expect(screen.getAllByRole('button').map((button) => button.textContent)).toEqual(['Run Dev', 'Run Tests'])
 
     await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Run Tests' })))
     expect(runCalls()).toEqual([['worktree.run', { worktreeId: 'w1', kind: 'test' }]])

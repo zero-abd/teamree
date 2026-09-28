@@ -626,7 +626,7 @@
 /* One raised box per worktree, its panes inside it; a 2px split edge down its left. */
 .worktree {
   position: relative;
-  padding: 6px 3px 6px 0;
+  padding: 4px 3px 4px 0;
   border: 1px solid transparent;
   border-radius: var(--r3);
   background: var(--bg-worktree);
@@ -677,7 +677,7 @@
 /* A task and its child tasks share one box; each level is one step in, with nothing drawn between. */
 .task {
   position: relative;
-  padding: 6px 3px 6px 0;
+  padding: 4px 3px 4px 0;
   border: 1px solid transparent;
   border-radius: var(--r3);
   background: var(--bg-worktree);
@@ -876,15 +876,10 @@
   min-height: 20px;
 }
 
-/* Too narrow for the name and its chips, the chips wrap under it at their size rather than fold. */
+/* One line: too narrow for the name and its chips, the chips fold into `⋯` rather than wrap under it. */
 .worktree__title {
-  flex-wrap: wrap;
-  row-gap: 2px;
-  min-height: 20px;
-}
-
-.sidebar--compact .worktree__title {
   flex-wrap: nowrap;
+  min-height: 20px;
 }
 
 /* Cut only where it alone is too long for the line, down to a floor; the chips wrap under it first. */
@@ -1282,7 +1277,7 @@
    of the same column as the title line's facts. */
 .panes {
   margin: 0;
-  padding: 1px 12px 0 calc(6px + var(--depth, 0) * 14px);
+  padding: 0 12px 0 calc(6px + var(--depth, 0) * 14px);
   list-style: none;
 }
 
@@ -1618,22 +1613,22 @@
 .worktree__ask {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--s1);
   margin: 2px 0 var(--s1) 22px;
-  padding: 7px var(--s2);
+  padding: 5px var(--s2) 6px;
   border: 1px solid color-mix(in srgb, var(--warning) 32%, transparent);
   border-radius: var(--r2);
   background: color-mix(in srgb, var(--warning) 8%, transparent);
 }
 
+/* One line; the whole question is its hover text. */
 .worktree__ask-text {
   overflow: hidden;
   color: var(--fg);
   font-size: var(--text-sm);
   line-height: 1.35;
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .worktree__ask-field {
@@ -1660,17 +1655,17 @@
   padding: var(--s1) var(--s2);
 }
 
+/* The question keeps most of the line; the answers clip before it does. */
 .worktree__ask--compact .worktree__ask-text {
-  display: block;
-  flex: 1;
+  flex: 1 0 60%;
   min-width: 0;
-  white-space: nowrap;
-  text-overflow: ellipsis;
 }
 
 .worktree__ask--compact .answers {
+  flex: 0 1 auto;
   flex-wrap: nowrap;
-  flex-shrink: 0;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .worktree__line {

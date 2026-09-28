@@ -14,6 +14,7 @@ import {
   paneNames,
   paneNamesById,
   paneText,
+  shownActivity,
   sinceLabel,
   truncateName,
   watchedBy,
@@ -153,7 +154,7 @@ describe('dotTone', () => {
   it('draws a stopped run or agent apart from one alive at its prompt', () => {
     expect(dotTone('stopped', undefined)).toBe('stopped')
     expect(dotTone('stopped', 'claude')).toBe('stopped')
-    expect(TONE_LABEL[dotTone('stopped', undefined)]).toBe('stopped')
+    expect(TONE_LABEL[dotTone('stopped', undefined)]).toBe('ended')
     expect(dotClass(dotTone('stopped', 'claude'))).not.toBe(dotClass(dotTone('quiet', 'claude')))
   })
 
@@ -714,12 +715,12 @@ describe('TONE_LABEL', () => {
       working: 'working',
       quiet: 'ready',
       idle: 'idle',
-      stopped: 'stopped',
+      stopped: 'ended',
       done: 'finished'
     })
   })
 
-  it('calls a live agent at its prompt ready, an ended one stopped and a quiet shell idle', () => {
+  it('calls a live agent at its prompt ready, an ended one ended and a quiet shell idle', () => {
     expect(TONE_LABEL[dotTone('quiet', 'codex')]).toBe('ready')
     expect(
       TONE_LABEL[
@@ -728,7 +729,7 @@ describe('TONE_LABEL', () => {
           'codex'
         )
       ]
-    ).toBe('stopped')
+    ).toBe('ended')
     expect(TONE_LABEL[dotTone('quiet', undefined)]).toBe('idle')
   })
 })
@@ -745,5 +746,22 @@ describe('an agent back at its prompt after a turn', () => {
     const codex = terminal({ id: 'c', agent: 'codex', lastOutputAt: 1_000 })
     const tones = [claude, claudeLater, codex].map((pane) => dotTone(activityOf(pane), paneAgent(pane)))
     expect(tones).toEqual(['quiet', 'quiet', 'quiet'])
+  })
+})
+
+// The pane draws an exited agent as ended; its tab, row and pill say the same.
+describe('shownActivity', () => {
+  it('reads a clean exit, a ^C and a restore as ended, and any other exit as failed', () => {
+    expect(shownActivity(terminal({ id: 'a', agent: 'claude', running: false, exitCode: 0 }))).toBe('stopped')
+    expect(shownActivity(terminal({ id: 'b', agent: 'claude', running: false, exitCode: 130 }))).toBe('stopped')
+    expect(shownActivity(terminal({ id: 'c', running: false, exitCode: 1, restored: 'stopped' }))).toBe('stopped')
+    expect(shownActivity(terminal({ id: 'd', running: false, exitCode: 1 }))).toBe('failed')
+    expect(shownActivity(terminal({ id: 'e', agent: 'claude', busy: true }))).toBe('working')
+  })
+
+  it('is what a row carries', () => {
+    const [ended] = agentRows([terminal({ id: 'a', agent: 'claude', running: false, exitCode: 0 })], 'wt1', 0)
+    expect(ended?.activity).toBe('stopped')
+    expect(TONE_LABEL.stopped).toBe('ended')
   })
 })

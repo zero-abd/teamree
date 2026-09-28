@@ -100,7 +100,7 @@ export function RunButtons({ worktreeId }: { worktreeId: string }): React.JSX.El
               onClick={() => actions.run(offer.kind, false)}
             >
               {running ? <span className="run-buttons__dot" aria-hidden="true" /> : <Icon name="play" size={14} />}
-              {label}
+              {running ? label : `Run ${label}`}
             </button>
             {running ? (
               <>

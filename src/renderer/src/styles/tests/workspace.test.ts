@@ -72,7 +72,19 @@ describe('workspace.css', () => {
     expect(name('.workspace__panes--zoomed')).not.toBe(name('.workspace__panes'))
   })
 
-  it.each(['.tab__rename', '.tab__close'])('draws %s faintly at rest, not invisibly', (selector) => {
-    expect(opacitiesOf(SHEET, selector)).toEqual(['var(--control-rest)'])
+  it('draws a tab’s close faintly at rest, not invisibly', () => {
+    expect(opacitiesOf(SHEET, '.tab__close')).toEqual(['var(--control-rest)'])
+  })
+
+  // Double-click renames too; beside the close on every shown tab, the pencil was one mark too many.
+  it('keeps a tab’s rename out of sight until the tab is hovered or it has the focus', () => {
+    expect(opacitiesOf(SHEET, '.tab__rename')).toEqual(['var(--row-action-rest)'])
+    expect(declarationOf(ruleFor(SHEET, '.tab:is(:hover, :focus-within) .tab__rename'), 'opacity')).toBe('1')
+  })
+
+  it('draws a head with no worktree as the drag edge alone', () => {
+    const bare = ruleFor(SHEET, '.workspace__head--bare')
+    expect(declarationOf(bare, 'background')).toBe('transparent')
+    expect(declarationOf(bare, 'border-bottom-color')).toBe('transparent')
   })
 })

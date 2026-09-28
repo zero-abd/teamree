@@ -2,6 +2,7 @@
 
 import { useRef, useState } from 'react'
 import type { Project, ProjectBase } from '@shared/entities'
+import { useSidebarView } from '../state/sidebarViewStore'
 import { useNow } from '../state/useNow'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { agoLabel } from './agentRows'
@@ -63,6 +64,8 @@ export function ProjectHead({
   const anyMerged = useWorkspaceStore((state) =>
     state.worktrees.some((worktree) => worktree.projectId === project.id && state.landings[worktree.id]?.merged)
   )
+  const sorted = useSidebarView((state) => state.byAttention.includes(project.id))
+  const toggleAttention = useSidebarView((state) => state.toggleAttention)
   const openMenu = (anchor: RowMenuAnchor, from: HTMLElement | null = row.current): void => {
     opener.current = from
     setMenuAt(anchor)
@@ -90,6 +93,12 @@ export function ProjectHead({
     ...(anyMerged
       ? [{ label: 'Clean Up Merged…', onChoose: () => openDialog({ kind: 'clean-up', projectId: project.id }) }]
       : []),
+    {
+      label: 'Sort by Attention',
+      ...(sorted ? { hint: 'On' } : {}),
+      onChoose: () => toggleAttention(project.id),
+      separated: true
+    },
     { label: 'Teamwork…', onChoose: () => openTeamwork(project.id), separated: true },
     { label: 'Setup Command…', onChoose: () => openSetting('Setup command') },
     { label: 'Remove from teamree', onChoose: onForget, separated: true },
