@@ -142,6 +142,7 @@ const PREFIX_ICONS: Readonly<Record<string, IconName>> = {
   teamwork: 'team',
   'shared-note': 'page',
   'new-task': 'new-task',
+  'task-in': 'new-task',
   'open-branch': 'branch',
   join: 'team',
   run: 'play',

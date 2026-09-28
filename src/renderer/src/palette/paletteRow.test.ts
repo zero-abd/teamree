@@ -87,6 +87,7 @@ describe('a row’s icon', () => {
   it('gives each command family its own icon, and the rest one neutral mark', () => {
     expect(rowIcon(action('new-worktree'))).toEqual({ icon: 'new-task' })
     expect(rowIcon(action('new-task:rate limits'))).toEqual({ icon: 'new-task' })
+    expect(rowIcon(action('task-in:w1'))).toEqual({ icon: 'new-task' })
     expect(rowIcon(action('setting:Copy on Select'))).toEqual({ icon: 'settings' })
     expect(rowIcon(action('run:dev'))).toEqual({ icon: 'play' })
     expect(rowIcon(action('stop-run:test'))).toEqual({ icon: 'stop' })
