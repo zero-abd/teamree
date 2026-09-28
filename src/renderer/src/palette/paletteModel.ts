@@ -911,23 +911,26 @@ export function queryGroups(
   const listed = stuck ? [...found, ...startFrom(items, query.trim())] : found
   const ranked = join === null ? listed : [join, ...listed.filter((item) => !isDimmed(item))]
   const byKind = new Map<string, PaletteItem[]>()
-  const ordered = filesFirst(ranked[0], files ?? [], lineQuery(query).path)
-    ? [...(files ?? []), ...ranked]
-    : [...ranked, ...(files ?? [])]
-  for (const item of ordered) {
+  for (const item of ranked) {
     const title = KIND_TITLE[item.kind]
     byKind.set(title, [...(byKind.get(title) ?? []), item])
   }
-  return [...byKind].map(([title, rows]) => ({ title, items: rows }))
+  const groups = [...byKind].map(([title, rows]) => ({ title, items: rows }))
+  if (files === null || files.length === 0) return groups
+  const at = filesAt(groups, files, lineQuery(query).path)
+  return [...groups.slice(0, at), { title: KIND_TITLE.file, items: [...files] }, ...groups.slice(at)]
 }
 
-/** A file named by the query (`matchTier` 2+) leads unless the best row's own name starts a word with the query. */
-function filesFirst(best: PaletteItem | undefined, files: readonly PaletteItem[], wanted: string): boolean {
-  if (best === undefined || best.id.startsWith('join:')) return false
-  if (!files.some((file) => matchTier(file.search, wanted) >= 2)) return false
-  const label = best.label.toLowerCase()
-  const at = label.indexOf(wanted.toLowerCase())
-  return at === -1 || !isWordStart(label, at)
+/**
+ * Where the Files group goes: last, unless a file's name is or starts with the query (`matchTier` 2+); then
+ * ahead of the first group whose best row's name does not start with it either.
+ */
+function filesAt(groups: readonly PaletteGroup[], files: readonly PaletteItem[], wanted: string): number {
+  if (!files.some((file) => matchTier(file.search, wanted) >= 2)) return groups.length
+  const named = (item: PaletteItem | undefined): boolean =>
+    item === undefined || item.id.startsWith('join:') || item.label.toLowerCase().startsWith(wanted.toLowerCase())
+  const loose = groups.findIndex((group) => !named(group.items[0]))
+  return loose === -1 ? groups.length : loose
 }
 
 const KIND_TITLE: Record<PaletteItem['kind'], string> = {

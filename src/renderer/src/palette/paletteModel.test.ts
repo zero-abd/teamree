@@ -1428,6 +1428,17 @@ describe('a file the query names', () => {
     expect(first('notes', [fileItem('docs/NOTES-2026.md')])?.label).toBe('NOTES-2026.md')
   })
 
+  it('comes after a worktree the query names, and before the command it only matches loosely', () => {
+    const named = buildPaletteItems(context({ worktrees: [worktree({ id: 'w1', name: 'notes pass' })] }))
+    const groups = queryGroups(named, 'NOTES', [fileItem('NOTES.md')])
+    expect(groups.map((group) => [group.title, group.items[0]?.label])).toEqual([
+      ['Worktrees', 'notes pass'],
+      ['Files', 'NOTES.md'],
+      ['Commands', 'New Task in notes pass']
+    ])
+    expect(groups[2]?.items.map((item) => item.label)).toContain('New Markdown')
+  })
+
   it('leaves a command whose name starts with the query first', () => {
     expect(first('new markdown', [fileItem('new markdown.md')])?.label).toBe('New Markdown')
     expect(first('notes', [fileItem('src/release-notes-draft.ts')])?.label).toBe('New Markdown')
