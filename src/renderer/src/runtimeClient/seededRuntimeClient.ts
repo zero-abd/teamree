@@ -615,6 +615,9 @@ export function createSeededRuntimeClient(): RuntimeClient {
     'project.pullBase': () => {
       throw Object.assign(new Error('no remote'), { code: 'not_found' })
     },
+    'project.resetBase': () => {
+      throw Object.assign(new Error('no remote'), { code: 'not_found' })
+    },
     'project.fetch': ({ projectId }) => {
       const next: Project = { ...required(projects.get(projectId), 'project'), fetch: { fetchedAt: Date.now() } }
       projects.set(next.id, next)

@@ -99,12 +99,19 @@ import {
   type TrashNote
 } from './worktreeTrash'
 import { pushWorktree } from './worktreePush'
-import { pullProjectBase, pushProjectBase, readProjectBase, type ProjectBaseOptions } from './projectBase'
+import {
+  pullProjectBase,
+  pushProjectBase,
+  readProjectBase,
+  resetProjectBase,
+  type ProjectBaseOptions
+} from './projectBase'
 import { bareRef } from './reviewUrl'
 import { abortWorktreeUpdate, continueWorktreeUpdate, resolveWorktreeConflict, updateWorktree } from './worktreeUpdate'
 import {
   createGhProbe,
   createPullRequest,
+  landingOnto,
   mergeIntoBase,
   readCheckFailure,
   readLanding,
@@ -1519,10 +1526,14 @@ export class GitService {
   /** Brings its base into this worktree, a child's parent branch included; a conflict leaves it mid-way. See worktreeUpdate.ts. */
   async worktreeUpdate(params: ParamsOf<'worktree.update'>): Promise<WorktreeUpdate> {
     const worktree = this.#requireReadyWorktree(params.worktreeId, 'updating')
+    const baseRef = this.#updateBase(worktree, params.landing === true)
     return updateWorktree(this.#runner, {
       worktreeId: worktree.id,
       worktreePath: worktree.path,
-      baseRef: this.#updateBase(worktree, params.landing === true),
+      baseRef:
+        params.landing === true && worktree.baseRef === undefined
+          ? await landingOnto(this.#runner, this.#requireProject(worktree.projectId).path, baseRef)
+          : baseRef,
       now: this.#now
     })
   }
@@ -1609,6 +1620,10 @@ export class GitService {
 
   async projectPullBase(params: ParamsOf<'project.pullBase'>): Promise<ProjectBase> {
     return pullProjectBase(this.#runner, this.#baseOptions(params.projectId))
+  }
+
+  async projectResetBase(params: ParamsOf<'project.resetBase'>): Promise<ProjectBase> {
+    return resetProjectBase(this.#runner, this.#baseOptions(params.projectId))
   }
 
   #baseOptions(projectId: string): ProjectBaseOptions {

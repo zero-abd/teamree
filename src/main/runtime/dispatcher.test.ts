@@ -186,6 +186,7 @@ describe('dispatcher', () => {
       'project.pullBase',
       'project.pushBase',
       'project.remove',
+      'project.resetBase',
       // Local: writes into this machine's checkout.
       'project.saveSettings',
       'project.saveTemplate',

@@ -165,13 +165,7 @@ export function App(): React.JSX.Element {
         {dialog?.kind === 'confirm-trash-project' ? <ConfirmTrashProjectDialog projectId={dialog.projectId} /> : null}
         {dialog?.kind === 'confirm-merge' ? <ConfirmMergeDialog worktreeId={dialog.worktreeId} /> : null}
         {dialog?.kind === 'create-pr' ? <CreatePullRequestDialog worktreeId={dialog.worktreeId} /> : null}
-        {dialog?.kind === 'push-base' ? (
-          <PushBaseDialog
-            key={dialog.projectId}
-            projectId={dialog.projectId}
-            {...(dialog.failure === undefined ? {} : { failure: dialog.failure })}
-          />
-        ) : null}
+        {dialog?.kind === 'push-base' ? <PushBaseDialog key={dialog.projectId} projectId={dialog.projectId} /> : null}
         {dialog?.kind === 'confirm-keep' ? <ConfirmKeepDialog worktreeId={dialog.worktreeId} /> : null}
         {dialog?.kind === 'move-under' ? <MoveUnderDialog worktreeId={dialog.worktreeId} /> : null}
         {dialog?.kind === 'hand-off' ? <HandOffDialog worktreeId={dialog.worktreeId} /> : null}

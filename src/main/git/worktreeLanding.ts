@@ -13,7 +13,8 @@ import type {
 import { ErrorCode } from '../../shared/protocol'
 import { GitServiceError } from './errors'
 import { createGitRunner, type GitRunner } from './gitProcess'
-import { tryPushProjectBase } from './projectBase'
+import { fetchBase } from './baseFetch'
+import { pushProjectBase } from './projectBase'
 import { failureExcerpt, failureLogArgs, readChecks, readReview } from './pullRequestChecks'
 import { assertRefShape } from './repository'
 import { readMergePreview } from './mergePreview'
@@ -327,7 +328,8 @@ export type MergeOptions = {
 
 /**
  * Merges the branch into the base branch where the project's checkout has it: a fast-forward
- * when it can, else a merge commit. Refuses over uncommitted work there, and backs out of a conflict.
+ * when it can, else a merge commit. A top-level landing fetches first and starts from origin's tip;
+ * it refuses over uncommitted work, backs out of a conflict, and undoes the merge when the push fails.
  */
 export async function mergeIntoBase(runner: GitRunner, options: MergeOptions): Promise<WorktreeMerge> {
   assertRefShape(options.branch, 'branch')
@@ -336,6 +338,7 @@ export async function mergeIntoBase(runner: GitRunner, options: MergeOptions): P
   const cwd = options.repoPath
   const read = (args: string[]): Promise<{ exitCode: number; stdout: string; stderr: string }> =>
     runner.tryRun({ args, cwd, readOnly: true, timeoutMs: 30_000 })
+  const top = options.parent === undefined
 
   const head = await read(['symbolic-ref', '--quiet', '--short', 'HEAD'])
   const current = head.exitCode === 0 ? head.stdout.trim() : ''
@@ -347,37 +350,32 @@ export async function mergeIntoBase(runner: GitRunner, options: MergeOptions): P
   }
 
   const status = await read(['status', '--porcelain=v2', '-z'])
-  const brought =
-    options.parent === undefined
-      ? null
-      : new Set((await read(['diff', '--name-only', '-z', `${into}...${options.branch}`])).stdout.split('\0'))
+  const brought = top
+    ? null
+    : new Set((await read(['diff', '--name-only', '-z', `${into}...${options.branch}`])).stdout.split('\0'))
   const dirty = parseChangeRecords(status.stdout)
     .filter((change) => change.kind !== 'untracked' && (brought === null || brought.has(change.path)))
     .map((change) => change.path)
-  const log = await read(['log', `-n${MERGE_COMMITS_SHOWN}`, '--format=%h%x1f%s', `${into}..${options.branch}`])
-  const commits = log.stdout
-    .split('\n')
-    .filter(Boolean)
-    .map((line) => {
-      const [shortSha = '', subject = ''] = line.split('\x1f')
-      return { shortSha, subject }
-    })
-  const fastForward = (await read(['merge-base', '--is-ancestor', into, options.branch])).exitCode === 0
-  const plan: WorktreeMerge = {
-    worktreeId: options.worktreeId,
-    into,
-    checkout: cwd,
-    commits,
-    fastForward,
-    dirty,
-    merged: false
+  const planOnto = async (onto: string): Promise<WorktreeMerge> => {
+    const log = await read(['log', `-n${MERGE_COMMITS_SHOWN}`, '--format=%h%x1f%s', `${onto}..${options.branch}`])
+    const commits = log.stdout
+      .split('\n')
+      .filter(Boolean)
+      .map((line) => {
+        const [shortSha = '', subject = ''] = line.split('\x1f')
+        return { shortSha, subject }
+      })
+    const fastForward = (await read(['merge-base', '--is-ancestor', onto, options.branch])).exitCode === 0
+    return { worktreeId: options.worktreeId, into, checkout: cwd, commits, fastForward, dirty, merged: false }
   }
   if (options.dryRun) {
-    if (fastForward || commits.length === 0) return plan
+    const onto = top ? await landingOnto(runner, cwd, into) : into
+    const plan = await planOnto(onto)
+    if (plan.fastForward || plan.commits.length === 0) return plan
     const preview = await readMergePreview(runner, {
       worktreeId: options.worktreeId,
       repoPath: cwd,
-      baseRef: into,
+      baseRef: onto,
       branch: options.branch
     })
     return preview.state === 'conflicts' ? { ...plan, conflicts: preview.conflicts } : plan
@@ -393,18 +391,26 @@ export async function mergeIntoBase(runner: GitRunner, options: MergeOptions): P
   if (options.parent?.agentWorking() === true) {
     throw new GitServiceError(ErrorCode.Conflict, `${options.parent.name}'s agent is working`)
   }
-  if (commits.length === 0) throw new GitServiceError(ErrorCode.Conflict, `${into} already has ${options.branch}`)
+
+  const push = top ? options.push : undefined
+  const restore = top ? await catchUp(runner, cwd, into, push !== undefined) : ''
+  const undo = async (): Promise<void> => {
+    if (restore !== '') await resetTo(runner, cwd, into, restore)
+  }
+  const plan = await planOnto(into)
+  if (plan.commits.length === 0) {
+    await undo()
+    throw new GitServiceError(ErrorCode.Conflict, `${into} already has ${options.branch}`)
+  }
 
   const merged = await runner.tryRun({
-    args: ['merge', fastForward ? '--ff-only' : '--no-ff', '--no-edit', options.branch],
+    args: ['merge', plan.fastForward ? '--ff-only' : '--no-ff', '--no-edit', options.branch],
     cwd,
     timeoutMs: 120_000
   })
   if (merged.exitCode !== 0) {
-    const unmerged = await read(['diff', '--name-only', '--diff-filter=U'])
-    const conflicts = unmerged.stdout.split('\n').filter(Boolean)
-    // Never leave the project's checkout mid-merge.
-    await runner.tryRun({ args: ['merge', '--abort'], cwd, timeoutMs: 30_000 }).catch(() => undefined)
+    const conflicts = await abortMerge(runner, cwd)
+    await undo()
     throw new GitServiceError(
       ErrorCode.Conflict,
       conflicts.length > 0
@@ -414,11 +420,105 @@ export async function mergeIntoBase(runner: GitRunner, options: MergeOptions): P
     )
   }
   const tip = await read(['rev-parse', 'HEAD'])
-  const pushed =
-    options.push === undefined || options.parent !== undefined
-      ? {}
-      : await tryPushProjectBase(runner, { projectId: options.push.projectId, repoPath: cwd, baseRef: into })
-  return { ...plan, merged: true, head: tip.stdout.trim(), ...pushed }
+  if (push === undefined) return { ...plan, merged: true, head: tip.stdout.trim() }
+  try {
+    await pushProjectBase(runner, { projectId: push.projectId, repoPath: cwd, baseRef: into })
+  } catch (error) {
+    // Never leave main holding a landing origin refused: it diverges at the next push from anyone.
+    await undo()
+    const failed = error instanceof GitServiceError ? error : null
+    throw new GitServiceError(
+      failed?.code ?? ErrorCode.GitFailed,
+      `Push failed: ${error instanceof Error ? error.message : String(error)} · merge undone`,
+      failed?.data
+    )
+  }
+  return { ...plan, merged: true, head: tip.stdout.trim(), pushed: true }
+}
+
+const originOf = (branch: string): string => `refs/remotes/${REMOTE}/${branch}`
+
+/** What a top-level landing into `branch` meets: origin's when the checkout's is only behind it, as the landing fast-forwards first. */
+export async function landingOnto(runner: GitRunner, repoPath: string, branch: string): Promise<string> {
+  const read = (args: string[]): Promise<{ exitCode: number }> =>
+    runner.tryRun({ args, cwd: repoPath, readOnly: true, timeoutMs: 30_000 })
+  return (await originMoved(read, branch)) === 'behind' ? `${REMOTE}/${branch}` : branch
+}
+
+/** How origin's copy of the branch has moved past the checkout's; null when it has nothing the checkout lacks. */
+async function originMoved(
+  read: (args: string[]) => Promise<{ exitCode: number }>,
+  branch: string
+): Promise<'behind' | 'diverged' | null> {
+  const origin = originOf(branch)
+  if ((await read(['rev-parse', '--verify', '--quiet', `${origin}^{commit}`])).exitCode !== 0) return null
+  if ((await read(['merge-base', '--is-ancestor', origin, branch])).exitCode === 0) return null
+  return (await read(['merge-base', '--is-ancestor', branch, origin])).exitCode === 0 ? 'behind' : 'diverged'
+}
+
+const FETCH_FAILURE: Record<string, string> = { auth: 'sign-in failed', offline: 'offline', timeout: 'timed out' }
+
+/**
+ * Fetches origin's base and brings the checkout's up to it: a fast-forward when behind, and when both moved
+ * and the landing pushes, a merge. Answers the tip a failed landing goes back to.
+ */
+async function catchUp(runner: GitRunner, cwd: string, branch: string, pushing: boolean): Promise<string> {
+  const read = (args: string[]): Promise<{ exitCode: number; stdout: string }> =>
+    runner.tryRun({ args, cwd, readOnly: true, timeoutMs: 30_000 })
+  const before = (await read(['rev-parse', branch])).stdout.trim()
+  const fetched = await fetchBase(runner, { repoPath: cwd, baseRef: `${REMOTE}/${branch}` }).catch(
+    () => 'failed' as const
+  )
+  // Without a push a stale origin only means landing locally; a push onto it would be refused.
+  if (pushing && !['moved', 'unchanged', 'skipped', 'not-found'].includes(fetched)) {
+    const why = FETCH_FAILURE[fetched]
+    throw new GitServiceError(ErrorCode.GitFailed, `Could not fetch ${REMOTE}/${branch}${why ? `: ${why}` : ''}`)
+  }
+  const moved = await originMoved(read, branch)
+  if (moved === 'behind') {
+    const forwarded = await runner.tryRun({ args: ['merge', '--ff-only', originOf(branch)], cwd, timeoutMs: 120_000 })
+    if (forwarded.exitCode !== 0) {
+      throw new GitServiceError(
+        ErrorCode.Conflict,
+        firstLine(forwarded.stderr) || `could not fast-forward ${branch} to ${REMOTE}/${branch}`
+      )
+    }
+    return (await read(['rev-parse', branch])).stdout.trim()
+  }
+  if (moved === 'diverged' && pushing) {
+    const merged = await runner.tryRun({ args: ['merge', '--no-edit', originOf(branch)], cwd, timeoutMs: 120_000 })
+    if (merged.exitCode !== 0) {
+      const conflicts = await abortMerge(runner, cwd)
+      await resetTo(runner, cwd, branch, before)
+      throw new GitServiceError(
+        ErrorCode.Conflict,
+        conflicts.length > 0
+          ? `${branch} conflicts with ${REMOTE}/${branch} in ${conflicts.join(', ')}`
+          : firstLine(merged.stderr) || `could not merge ${REMOTE}/${branch} into ${branch}`
+      )
+    }
+  }
+  return before
+}
+
+/** Backs out of a merge that stopped, answering the paths that conflicted. */
+async function abortMerge(runner: GitRunner, cwd: string): Promise<string[]> {
+  const unmerged = await runner.tryRun({ args: ['diff', '--name-only', '--diff-filter=U'], cwd, readOnly: true })
+  // Never leave the project's checkout mid-merge.
+  await runner.tryRun({ args: ['merge', '--abort'], cwd, timeoutMs: 30_000 }).catch(() => undefined)
+  return unmerged.stdout.split('\n').filter(Boolean)
+}
+
+/** Moves the checked-out branch back to `sha`, keeping any uncommitted work. */
+async function resetTo(runner: GitRunner, cwd: string, branch: string, sha: string): Promise<void> {
+  const tip = await runner.tryRun({ args: ['rev-parse', 'HEAD'], cwd, readOnly: true })
+  if (tip.stdout.trim() === sha) return
+  const reset = await runner.tryRun({ args: ['reset', '--keep', sha], cwd, timeoutMs: 120_000 })
+  if (reset.exitCode !== 0) {
+    throw new GitServiceError(ErrorCode.GitFailed, `could not put ${branch} back at ${sha.slice(0, 7)}`, {
+      detail: reset.stderr.trim()
+    })
+  }
 }
 
 function firstLine(text: string): string {
