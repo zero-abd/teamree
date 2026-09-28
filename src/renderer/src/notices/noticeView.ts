@@ -1,6 +1,7 @@
 // What a notice's card says and how it is coloured, from its text, tone and action.
 
 import type { IconName } from '../icons/Icon'
+import type { ProjectBase } from '@shared/entities'
 import type { Notice } from '../state/workspaceStore'
 
 /** The part before the first `: ` as the title and the rest as the detail; a short head only, or it is one title. */
@@ -21,3 +22,13 @@ export function noticeLook(notice: Pick<Notice, 'tone' | 'action'>): NoticeLook 
 }
 
 export const NOTICE_ICON: Record<NoticeLook, IconName> = { error: 'alert', success: 'check', neutral: 'info' }
+
+/** A landing's Undo only while main is still at the landing and unpushed; a base not read yet keeps it. */
+export function liveAction(action: Notice['action'], bases: Readonly<Record<string, ProjectBase>>): Notice['action'] {
+  if (action === undefined || !('undo' in action) || action.undo.kind !== 'land') return action
+  const base = bases[action.undo.projectId]
+  if (base === undefined) return action
+  const moved = base.head !== undefined && base.head !== action.undo.head
+  const pushed = base.upstream !== undefined && base.ahead === 0
+  return moved || pushed ? undefined : action
+}

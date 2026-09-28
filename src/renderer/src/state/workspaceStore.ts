@@ -331,9 +331,10 @@ export type Notice = {
 /** What a refusing commit hook said, kept until the next commit attempt in its worktree. */
 export type CommitBlock = { hook: string; output: string }
 
-/** What an Undo puts back: removed worktrees (`removedIds` parents first), one discard's paths, or a deleted shared note. */
+/** What an Undo puts back: removed worktrees (`removedIds` parents first), one discard's paths, a deleted shared note, or main before a local landing. */
 export type UndoTarget =
   | { kind: 'remove'; projectId: string; removedId: string }
+  | { kind: 'land'; projectId: string; head: string; before: string }
   | { kind: 'remove-many'; projectId: string; removedIds: string[] }
   | { kind: 'discard'; worktreeId: string; trashId: string }
   | { kind: 'discard-many'; worktreeId: string; trashIds: string[] }
@@ -2493,6 +2494,16 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     },
 
     async undo(target) {
+      if (target.kind === 'land') {
+        const { projectId, head, before } = target
+        try {
+          const base = await runtimeClient.call('project.resetBase', { projectId, landing: { head, before } })
+          set((state) => ({ bases: { ...state.bases, [projectId]: base } }))
+        } catch (error) {
+          failed('Could not undo the merge')(error)
+        }
+        return
+      }
       if (target.kind === 'shared-note') {
         useSharedNotes.getState().restore(target.shareId)
         return
@@ -4190,8 +4201,9 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     },
 
     async mergeIntoBase(worktreeId, push) {
+      let merged: WorktreeMerge
       try {
-        await pastLock(worktreeId, () =>
+        merged = await pastLock(worktreeId, () =>
           runtimeClient.call('worktree.mergeIntoBase', push === undefined ? { worktreeId } : { worktreeId, push })
         )
       } catch (error) {
@@ -4205,8 +4217,18 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         writeStoredPushOnMerge(storage, pushOnMerge)
       }
       if (get().dialog?.kind === 'confirm-merge') set({ dialog: null })
+      const landed = get().worktrees.find((worktree) => worktree.id === worktreeId)
+      if (landed !== undefined && landed.parentId === undefined && merged.merged) {
+        const { head, before } = merged
+        const undo: UndoTarget | undefined =
+          merged.pushed === true || head === undefined || before === undefined
+            ? undefined
+            : { kind: 'land', projectId: landed.projectId, head, before }
+        const text = `Merged "${shortened(worktreeLabel(worktreeDisplay(landed)))}" into ${merged.into}`
+        notify(text, 'info', undo === undefined ? undefined : { label: 'Undo', undo }, `land:${landed.projectId}`)
+      }
       // A child lands in its parent's checkout, which moves too.
-      const parentId = get().worktrees.find((worktree) => worktree.id === worktreeId)?.parentId
+      const parentId = landed?.parentId
       refresher.request(refreshTargets({ statuses: parentId === undefined ? [worktreeId] : [worktreeId, parentId] }))
       return null
     },

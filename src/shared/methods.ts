@@ -470,7 +470,13 @@ export const Params = {
   /** Merges origin's base into the checkout's, backing out of a conflict. */
   projectPullBase: z.object({ projectId: z.string().min(1) }),
   /** Resets the checkout's base branch to origin's; refused when a commit only it holds would be lost. */
-  projectResetBase: z.object({ projectId: z.string().min(1) }),
+  projectResetBase: z.object({
+    projectId: z.string().min(1),
+    /** Undoes one local landing instead: back to `before`, only while the branch is at `head` and unpushed. */
+    landing: z
+      .object({ head: z.string().regex(/^[0-9a-f]{40,64}$/i), before: z.string().regex(/^[0-9a-f]{40,64}$/i) })
+      .optional()
+  }),
   /** Fetches the base now, clearing any back-off. */
   projectFetch: z.object({ projectId: z.string().min(1) }),
   /** Everything a new worktree could branch from, for the create dialog. */

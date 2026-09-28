@@ -404,6 +404,7 @@ export async function mergeIntoBase(runner: GitRunner, options: MergeOptions): P
     throw new GitServiceError(ErrorCode.Conflict, `${into} already has ${options.branch}`)
   }
 
+  const before = (await read(['rev-parse', 'HEAD'])).stdout.trim()
   const merged = await runner.tryRun({
     args: ['merge', plan.fastForward ? '--ff-only' : '--no-ff', '--no-edit', options.branch],
     cwd,
@@ -421,7 +422,7 @@ export async function mergeIntoBase(runner: GitRunner, options: MergeOptions): P
     )
   }
   const tip = await read(['rev-parse', 'HEAD'])
-  if (push === undefined) return { ...plan, merged: true, head: tip.stdout.trim() }
+  if (push === undefined) return { ...plan, merged: true, head: tip.stdout.trim(), before }
   try {
     await pushProjectBase(runner, { projectId: push.projectId, repoPath: cwd, baseRef: into })
   } catch (error) {

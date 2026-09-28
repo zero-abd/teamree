@@ -318,3 +318,62 @@ describe('landing onto a main origin moved', () => {
     expect(await context.repo.git(['rev-parse', 'main'])).toBe(before)
   })
 })
+
+describe('undoing one local landing', () => {
+  const landLocally = async (context: Setup, name = 'Add sub') => {
+    const worktree = await worktreeWithCommit(context, name)
+    const merged = await context.service.worktreeMergeIntoBase({ worktreeId: worktree.id })
+    return { worktree, landing: { head: merged.head ?? '', before: merged.before ?? '' } }
+  }
+
+  it('puts main back where the landing found it, the task keeping its commit', async () => {
+    const context = await setup()
+    const start = await context.repo.git(['rev-parse', 'main'])
+    const { worktree, landing } = await landLocally(context)
+    expect(landing.before).toBe(start)
+    expect(landing.head).toBe(await context.repo.git(['rev-parse', 'main']))
+    expect((await context.service.projectBase({ projectId: context.projectId })).head).toBe(landing.head)
+
+    const base = await context.service.projectResetBase({ projectId: context.projectId, landing })
+
+    expect(base).toMatchObject({ ahead: 0, head: start })
+    expect(await context.repo.git(['rev-parse', 'main'])).toBe(start)
+    expect((await context.service.worktreeLanding({ worktreeId: worktree.id })).merged).toBe(false)
+    expect(await subjects(context.repo, worktree.branch)).toContain('Add sub')
+  })
+
+  it('refuses once main has moved since', async () => {
+    const context = await setup()
+    const { landing } = await landLocally(context)
+    await landLocally(context, 'Add mul')
+    const moved = await context.repo.git(['rev-parse', 'main'])
+
+    const error = await rejection(context.service.projectResetBase({ projectId: context.projectId, landing }))
+
+    expect(error.message).toBe('main has moved since')
+    expect(await context.repo.git(['rev-parse', 'main'])).toBe(moved)
+  })
+
+  it('refuses once main has been pushed', async () => {
+    const context = await setup()
+    const { landing } = await landLocally(context)
+    await context.service.projectPushBase({ projectId: context.projectId })
+
+    const error = await rejection(context.service.projectResetBase({ projectId: context.projectId, landing }))
+
+    expect(error.message).toBe('main was pushed')
+    expect(await context.repo.git(['rev-parse', 'main'])).toBe(landing.head)
+  })
+
+  it('refuses when a commit only main holds would go', async () => {
+    const context = await setup()
+    const { worktree, landing } = await landLocally(context)
+    await context.service.removeWorktree({ worktreeId: worktree.id, force: true })
+    await context.repo.git(['branch', '-D', worktree.branch])
+
+    const error = await rejection(context.service.projectResetBase({ projectId: context.projectId, landing }))
+
+    expect(error.message).toBe('1 commit is only on main')
+    expect(await context.repo.git(['rev-parse', 'main'])).toBe(landing.head)
+  })
+})

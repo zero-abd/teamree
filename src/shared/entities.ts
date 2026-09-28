@@ -494,6 +494,8 @@ export type WorktreeMerge = {
   merged: boolean
   /** The base branch's tip after the merge. */
   head?: string
+  /** Its tip just before, where `project.resetBase` with `landing` puts it back. */
+  before?: string
   /** Asked with `push`: whether the base then reached `origin`. */
   pushed?: boolean
   /** Why that push did not land; the merge stands. */
@@ -511,6 +513,8 @@ export type ProjectBase = {
   upstream?: string
   ahead: number
   behind: number
+  /** The branch's tip. */
+  head?: string
 }
 
 /** The run kept and the task's other runs removed, their branches left in place. */
