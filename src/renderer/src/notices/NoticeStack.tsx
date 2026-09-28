@@ -13,12 +13,15 @@ import { useWorkspaceStore, type Notice } from '../state/workspaceStore'
 import { HandoffPopups } from '../teamwork/HandoffPopups'
 import { SharedNotePopups } from '../teamwork/SharedNotePopups'
 import { UpdateAvailableCard } from '../updates/UpdateAvailableCard'
+import { askForYou, useMessageStore } from '../state/messages'
 import { hiddenAsks, type HiddenAsk } from './askingNotices'
 import { NOTICE_ICON, noticeLook, noticeParts } from './noticeView'
 import { useAnnouncements } from './useAnnouncements'
 
 /** The slide out is 180 ms; this is only for a card whose animation never ends (none running, a test). */
 const LEAVE_CEILING_MS = 400
+
+const MOST_ASKING = 3
 
 export function NoticeStack(): React.JSX.Element {
   const spoken = useAnnouncements()
@@ -178,7 +181,10 @@ function AskingCards(): React.JSX.Element | null {
   const askingPanes = useMemo(() => asks.map((ask) => ask.terminal), [asks])
   const evidence = usePaneEvidence(askingPanes, state.terminals)
   const [dismissed, setDismissed] = useState<ReadonlySet<string>>(new Set())
-  const shown = hiddenAsks(state, evidence).filter((ask) => !dismissed.has(ask.key))
+  // Three at most: the status bar counts the rest, and the corner stays a corner.
+  const shown = hiddenAsks(state, evidence)
+    .filter((ask) => !dismissed.has(ask.key))
+    .slice(0, MOST_ASKING)
   if (shown.length === 0) return null
   return (
     <div className="notices notices--asking">
@@ -197,7 +203,14 @@ function AskingCard({ ask, onDismiss }: { ask: HiddenAsk; onDismiss: () => void 
   const answerPane = useWorkspaceStore((state) => state.answerPane)
   const revealPane = useWorkspaceStore((state) => state.revealPane)
   const { terminal } = ask
-  const allow = terminal.screenMenu?.choices[0]
+  // A question put to you with `msg ask` is the message's own words and options, not the screen's.
+  const put = useMessageStore((state) =>
+    terminal.askingYou === undefined ? undefined : askForYou(state.messages, terminal.worktreeId)
+  )
+  const answer = useMessageStore((state) => state.answer)
+  const allow = put === undefined ? terminal.screenMenu?.choices[0] : undefined
+  const options = put?.options ?? []
+  const question = put?.text ?? ask.question
   return (
     <div className="notice notice--asking" role="group" aria-label={`${ask.worktreeName} needs you`}>
       <span className="notice__icon" aria-hidden="true">
@@ -205,19 +218,31 @@ function AskingCard({ ask, onDismiss }: { ask: HiddenAsk; onDismiss: () => void 
       </span>
       <div className="notice__body">
         <p className="notice__title">{`${ask.worktreeName} needs you`}</p>
-        {ask.question === null ? null : (
-          <p className="notice__detail notice__detail--ask" title={ask.question}>
-            {ask.question}
+        {question === null ? null : (
+          <p className="notice__detail notice__detail--ask" title={question}>
+            {question}
           </p>
         )}
         <div className="notice__actions">
+          {put === undefined
+            ? null
+            : options.map((option, index) => (
+                <Button
+                  key={option}
+                  variant={index === 0 ? 'primary' : 'secondary'}
+                  size="sm"
+                  onClick={() => void answer(put, option)}
+                >
+                  {option}
+                </Button>
+              ))}
           {allow === undefined ? null : (
             <Button variant="primary" size="sm" title={allow.label} onClick={() => void answerPane(terminal.id, allow)}>
               Allow
             </Button>
           )}
           <Button
-            variant={allow === undefined ? 'primary' : 'ghost'}
+            variant={allow === undefined && options.length === 0 ? 'primary' : 'ghost'}
             size="sm"
             onClick={() =>
               void Promise.resolve(revealPane(terminal.worktreeId, terminal.id)).then(() => requestRegionFocus('panes'))

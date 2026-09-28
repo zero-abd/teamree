@@ -21,6 +21,7 @@ vi.mock('../runtimeClient/currentRuntimeClient', () => ({
 const { useWorkspaceStore } = await import('../state/workspaceStore')
 const { NoticeStack } = await import('./NoticeStack')
 const { noticeLook, noticeParts } = await import('./noticeView')
+const { useMessageStore } = await import('../state/messages')
 
 const INITIAL = useWorkspaceStore.getState()
 
@@ -192,6 +193,31 @@ describe('an agent asking out of sight', () => {
     expect(answerPane).toHaveBeenCalledWith('term_b', { label: 'Yes', keys: ['1'] })
     fireEvent.click(within(notice).getByRole('button', { name: 'Open' }))
     expect(revealPane).toHaveBeenCalledWith('w2', 'term_b')
+  })
+
+  // `msg ask --to you`: the question is the message's, and its options are the answers.
+  it('quotes a question put to you, with its options as the answers', () => {
+    const answer = vi.fn(async () => true)
+    const ask = {
+      id: 7,
+      projectId: 'p1',
+      kind: 'ask' as const,
+      from: { worktreeId: 'w2', terminalId: 'term_b' },
+      to: { you: true as const },
+      text: 'Which store for the limiter?',
+      options: ['redis', 'postgres'],
+      at: 1,
+      state: 'queued' as const
+    }
+    useMessageStore.setState({ messages: [ask], answer })
+    setAsking({ terminals: { term_b: { ...asking, agentEvent: undefined, screenMenu: undefined, askingYou: 7 } } })
+    render(<NoticeStack />)
+    const notice = card('payment retries needs you')
+    expect(within(notice).getByText('Which store for the limiter?')).toBeTruthy()
+    fireEvent.click(within(notice).getByRole('button', { name: 'redis' }))
+    expect(answer).toHaveBeenCalledWith(ask, 'redis')
+    expect(within(notice).getByRole('button', { name: 'Open' })).toBeTruthy()
+    useMessageStore.setState({ messages: [] })
   })
 
   it('draws none while its pane is on screen, and none once dismissed', () => {
