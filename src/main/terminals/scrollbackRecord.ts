@@ -3,7 +3,7 @@
 // clipboard and window title, so a record is reduced to an allowlist: text,
 // whitespace controls and SGR. Allowlist, not denylist: the dangerous set is not closed.
 
-import { markerText, markerTime } from '../../shared/paneMarker'
+import { markerLabel, markerText, markerTime } from '../../shared/paneMarker'
 import { freshAgentLabel } from '../../shared/paneRestore'
 
 /** One pane's kept output, and when this machine wrote it down. */
@@ -78,9 +78,51 @@ export function noConversationMark(agent: string): string {
   return markerLine(`Nothing to resume · ${freshAgentLabel(agent)}`)
 }
 
-/** Said into an agent pane left stopped on the way back up; its buttons offer the rest. */
-export function agentStoppedMark(reason: string): string {
-  return markerLine(`${reason.charAt(0).toUpperCase()}${reason.slice(1)} · not resumed`)
+/** A line 0.3 to 0.7 wrote as `[… — …]`, and the marker label it reads as now; null drops the line. */
+const LEGACY_MARKS: readonly [RegExp, (match: RegExpExecArray) => string | null][] = [
+  [/^\[record — up to [^\]]*, nothing running\]$/u, () => null],
+  [/^\[end of record — not run again\]$/u, () => null],
+  [/^\[end of record — new shell below\]$/u, () => NEW_SHELL_BELOW],
+  [/^\[end of record — resume attempt below\]$/u, () => RESTORED],
+  [/^\[end of record — .+ starts again below\]$/u, () => RUN_AGAIN_BELOW],
+  [
+    /^\[resume refused — agent exited (\d+)[^;\]]*; fresh agent below\]$/u,
+    (m) => `Resume refused · exit ${m[1]} · New session`
+  ],
+  [/^\[resume refused — agent exited (\d+)[^\]]*\]$/u, (m) => `Resume refused · exit ${m[1]}`],
+  [/^\[no conversation to resume — (.+) below\]$/u, (m) => `Nothing to resume · ${m[1]}`],
+  [/^\[(.)(.*) — agent stopped, task not re-sent\]$/u, (m) => `${m[1]?.toUpperCase()}${m[2]} · not resumed`]
+]
+
+/**
+ * A record with the bracketed lines older versions wrote into it turned into marker lines, or dropped where
+ * nothing says them now. A stopped note at the very end goes too: the pane's end block says it.
+ */
+export function upgradedMarks(text: string): string {
+  if (!text.includes(' — ') && !text.includes(' · not resumed')) return text
+  type Line = { line: string; plain: string; label?: string | null; legacy?: true }
+  const lines: Line[] = text.split('\n').map((line) => {
+    const plain = line.replace(/\u001b\[[0-9;:]*m/gu, '').replace(/\r$/u, '')
+    const label = markerLabel(plain)
+    if (label !== null) return { line, plain, label }
+    for (const [pattern, legacy] of LEGACY_MARKS) {
+      const match = pattern.exec(plain)
+      if (match !== null) return { line, plain, label: legacy(match), legacy: true }
+    }
+    return { line, plain }
+  })
+  for (let index = lines.length - 1; index >= 0; index--) {
+    const entry = lines[index] as Line
+    if (entry.label === undefined && entry.plain.trim() !== '') break
+    if (entry.label?.endsWith(' · not resumed') === true) entry.label = null
+  }
+  return lines
+    .flatMap(({ line, label, legacy }) => {
+      if (label === null) return []
+      if (legacy === undefined || label === undefined) return [line]
+      return [`${DIM}${markerText(label)}${RESET}${line.endsWith('\r') ? '\r' : ''}`]
+    })
+    .join('\n')
 }
 
 /**

@@ -103,6 +103,7 @@ describe('the stage a pane is in', () => {
     ['ended', agent({ running: false, exitCode: 130 }), true],
     ['failed', agent({ running: false, exitCode: 1 }), true],
     ['restored', agent({ running: false, exitCode: 0, restored: 'stopped' }), true],
+    ['failed', agent({ running: false, exitCode: 1, restored: 'stopped', stoppedFor: 'failed' }), true],
     ['failed', terminal('t', { running: false, exitCode: 2 }), true],
     ['ended', terminal('t', { run: 'dev', running: false, exitCode: 129 }), true]
   ] as const)('reads %s', (stage, pane, seen) => {
@@ -116,11 +117,21 @@ describe('the stage a pane is in', () => {
 
 describe('an ended agent', () => {
   it('shows a marker line and exactly Resume, New Session, Close', () => {
-    mount(terminal('t1', { agent: 'claude', running: false, exitCode: 0 }))
+    mount(terminal('t1', { agent: 'claude', running: false, exitCode: 0, resumable: true }))
     expect(marker()).toBe('Ended 11:04')
     expect(actions()).toEqual(['Resume', 'New Session', 'Close'])
     expect(screen.getByRole('group', { name: 'Claude Code ended' })).toBeTruthy()
     expect(document.querySelector('.pane__notice')).toBeNull()
+  })
+
+  // Its Resume would have started a new session under the wrong word.
+  it('offers New Session first and no Resume when it has no conversation to pick up', () => {
+    mount(terminal('t1', { agent: 'claude', running: false, exitCode: 0 }))
+    expect(actions()).toEqual(['New Session', 'Close'])
+    fireEvent.click(screen.getByRole('button', { name: 'New Session' }))
+    expect(onRelaunch).toHaveBeenLastCalledWith('t1', { fresh: true })
+    fireEvent.keyDown(screen.getByTestId('surface-t1'), { key: 'Enter' })
+    expect(onRelaunch).toHaveBeenLastCalledWith('t1', { fresh: true })
   })
 
   it('says ^C for an agent interrupted out', () => {
@@ -131,11 +142,27 @@ describe('an ended agent', () => {
 
 describe('a failed pane', () => {
   it('offers an agent its conversation, a fresh run, its log and Close', () => {
-    mount(terminal('t1', { agent: 'claude', running: false, exitCode: 1 }))
+    mount(terminal('t1', { agent: 'claude', running: false, exitCode: 1, resumable: true }))
     expect(marker()).toBe('Exited 1 · 11:04')
     expect(actions()).toEqual(['Resume', 'Run Again', 'Show Log', 'Close'])
     fireEvent.click(screen.getByRole('button', { name: 'Run Again' }))
     expect(onRelaunch).toHaveBeenLastCalledWith('t1', { fresh: true })
+  })
+
+  it('offers an agent with nothing to resume Run Again first', () => {
+    mount(terminal('t1', { agent: 'claude', running: false, exitCode: 1 }))
+    expect(actions()).toEqual(['Run Again', 'Show Log', 'Close'])
+  })
+
+  // After a relaunch it read plain "Restored": the exit code and Show Log were gone.
+  it('stays failed through a relaunch, with its exit code and Show Log', () => {
+    mount(terminal('t1', { agent: 'claude', running: false, exitCode: 1, restored: 'stopped', stoppedFor: 'failed' }))
+    expect(marker()).toBe('Exited 1 · 11:04')
+    expect(actions()).toEqual(['Run Again', 'Show Log', 'Close'])
+    cleanup()
+    const pane = { agent: 'claude', running: false, exitCode: 1, restored: 'stopped', stoppedFor: 'failed' } as const
+    mount(terminal('t1', { ...pane, resumable: true }))
+    expect(actions()).toEqual(['Resume', 'Run Again', 'Show Log', 'Close'])
   })
 
   it('offers a Run pane Run Again, Show Log and Close', () => {
@@ -196,14 +223,28 @@ describe('a command that was not found', () => {
 })
 
 describe('a pane restored after relaunch', () => {
-  it('shows Restored and exactly Resume, New Session', () => {
-    mount(terminal('t1', { agent: 'claude', running: false, exitCode: 0, restored: 'stopped' }))
-    expect(marker()).toBe('Restored · 11:04')
-    expect(actions()).toEqual(['Resume', 'New Session'])
-    fireEvent.click(screen.getByRole('button', { name: 'Resume' }))
-    expect(onResumeConversation).toHaveBeenCalledExactlyOnceWith('t1')
+  // "Resume" under "No conversation to resume" started a fresh agent.
+  it('says there was nothing to resume and offers New Session first, and Resume… only for a chosen conversation', () => {
+    const pane = { agent: 'claude', running: false, exitCode: 0, restored: 'stopped' } as const
+    mount(terminal('t1', { ...pane, stoppedFor: 'no-conversation' }))
+    expect(marker()).toBe('Nothing to resume · 11:04')
+    expect(actions()).toEqual(['New Session', 'Resume…', 'Close'])
     fireEvent.click(screen.getByRole('button', { name: 'New Session' }))
     expect(onRelaunch).toHaveBeenLastCalledWith('t1', { fresh: true })
+    fireEvent.click(screen.getByRole('button', { name: 'Resume…' }))
+    expect(onResumeConversation).toHaveBeenCalledExactlyOnceWith('t1')
+    fireEvent.keyDown(screen.getByTestId('surface-t1'), { key: 'Enter' })
+    expect(onRelaunch).toHaveBeenLastCalledWith('t1', { fresh: true })
+    expect(screen.queryByRole('button', { name: 'Resume' })).toBeNull()
+  })
+
+  // Two boundaries said it twice: "Task done · not resumed" in the record and "Restored" under it.
+  it('says a done task once, with New Session and Close', () => {
+    mount(
+      terminal('t1', { agent: 'claude', running: false, exitCode: 0, restored: 'stopped', stoppedFor: 'task-done' })
+    )
+    expect(marker()).toBe('Task done · 11:04')
+    expect(actions()).toEqual(['New Session', 'Close'])
   })
 
   it('draws no chip for a pane that came back running', () => {

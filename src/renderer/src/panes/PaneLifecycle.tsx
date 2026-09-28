@@ -4,6 +4,7 @@
 import { useEffect, useState } from 'react'
 import type { Terminal } from '@shared/entities'
 import { markerTime } from '@shared/paneMarker'
+import type { StoppedFor } from '@shared/paneRestore'
 import { runState } from '@shared/runCommands'
 import { AgentGlyph } from '../agents/glyphs'
 import { harnessName } from '../agents/harnesses'
@@ -26,7 +27,8 @@ const NOT_FOUND = 127
 /** The stage `terminal` is in; null for a live shell, which draws none. `seen`: it has printed. */
 export function paneStage(terminal: Terminal, seen: boolean): PaneState | null {
   if (!terminal.running) {
-    if (terminal.restored === 'stopped') return 'restored'
+    // One that failed before the quit came back failed, with its exit code.
+    if (terminal.restored === 'stopped' && terminal.stoppedFor !== 'failed') return 'restored'
     if (terminal.run !== undefined && runState(terminal) === 'stopped') return 'ended'
     const code = terminal.exitCode
     return code === undefined || code === 0 || code === INTERRUPTED ? 'ended' : 'failed'
@@ -215,6 +217,12 @@ export type EndActions = {
 
 type EndAction = { label: string; run: () => void; tone: ButtonVariant }
 
+const STOPPED_WORDS: Record<StoppedFor, string> = {
+  'task-done': 'Task done',
+  'no-conversation': 'Nothing to resume',
+  failed: 'Failed'
+}
+
 /** The end block's marker words: how it ended and when. */
 export function endMarker(
   terminal: Terminal,
@@ -222,7 +230,10 @@ export function endMarker(
   missing: MissingTool | null = null
 ): string {
   const time = terminal.lastOutputAt > 0 ? markerTime(terminal.lastOutputAt) : null
-  if (stage === 'restored') return time === null ? 'Restored' : `Restored · ${time}`
+  if (stage === 'restored') {
+    const why = terminal.stoppedFor === undefined ? 'Restored' : STOPPED_WORDS[terminal.stoppedFor]
+    return time === null ? why : `${why} · ${time}`
+  }
   if (stage === 'failed') {
     const head = missing === null ? `Exited ${terminal.exitCode ?? ''}`.trim() : `${missing.tool} not found`
     return [head, time].filter(Boolean).join(' · ')
@@ -230,6 +241,12 @@ export function endMarker(
   const stopped = terminal.run !== undefined && runState(terminal) === 'stopped'
   const head = [stopped ? 'Stopped' : 'Ended', time].filter(Boolean).join(' ')
   return terminal.exitCode === INTERRUPTED ? `${head} · ^C` : head
+}
+
+/** Whether the end block's first action starts its agent afresh rather than resuming or rerunning. */
+export function primaryIsFresh(terminal: Terminal, stage: 'ended' | 'failed' | 'restored'): boolean {
+  const agent = terminal.agent !== undefined && terminal.run === undefined
+  return stage === 'restored' || (agent && terminal.resumable !== true)
 }
 
 function endActions(
@@ -247,15 +264,19 @@ function endActions(
   })
   const primary = (action: EndAction): EndAction => ({ ...action, tone: 'primary' })
   const agent = terminal.agent !== undefined && terminal.run === undefined
+  // Resume only where there is a conversation to pick up: anything else starts afresh and says so.
   if (stage === 'restored') {
-    const resume = actions.onResumeConversation ?? (() => actions.onRelaunch())
-    return [{ label: 'Resume', run: resume, tone: 'primary' }, again('New Session', true)]
+    const pick = actions.onResumeConversation
+    const others: EndAction[] =
+      pick === undefined || terminal.stoppedFor === 'task-done'
+        ? []
+        : [{ label: 'Resume…', run: pick, tone: 'secondary' }]
+    return [primary(again('New Session', true)), ...others, close]
   }
   if (agent) {
-    const resume = primary(again('Resume'))
-    return stage === 'failed'
-      ? [resume, again('Run Again', true), log, close]
-      : [resume, again('New Session', true), close]
+    const fresh = again(stage === 'failed' ? 'Run Again' : 'New Session', true)
+    const rest = stage === 'failed' ? [log, close] : [close]
+    return terminal.resumable === true ? [primary(again('Resume')), fresh, ...rest] : [primary(fresh), ...rest]
   }
   const rerun = primary(again(terminal.run === undefined ? 'New Shell' : 'Run Again'))
   return stage === 'failed' ? [rerun, log, close] : [rerun, close]

@@ -27,6 +27,8 @@ export type MessageServiceOptions = {
   onChange: () => void
   /** An ask for the person at the window. */
   onAsk?: (message: TaskMessage) => void
+  /** True while the app is quitting: an ask let go of then ended with the app, not with its agent. */
+  quitting?: () => boolean
   now?: () => number
   later?: DeliveryOptions['later']
 }
@@ -45,8 +47,14 @@ export class MessageService {
       ...(options.later === undefined ? {} : { later: options.later }),
       onDelivered: () => options.onChange()
     })
-    // Whatever waited on an ask died with the last run.
-    this.stopWaiting((ask) => ask.to.you === true)
+    // Whatever waited on an ask died with the last run, unless its pane was kept running through it.
+    const kept = new Set(
+      options.panes
+        .all()
+        .filter((pane) => pane.running && pane.restored === undefined)
+        .map((pane) => pane.id)
+    )
+    this.stopWaiting((ask) => ask.to.you === true && !kept.has(ask.from.terminalId ?? ''), 'app')
   }
 
   async send(params: ParamsOf<'message.send'>): Promise<TaskMessage[]> {
@@ -98,12 +106,18 @@ export class MessageService {
   }
 
   /** The asker stopped waiting on these asks, or started again. */
-  waiting(ids: readonly number[], waiting: boolean): { changed: number } {
+  waiting(ids: readonly number[], waiting: boolean, by?: TaskMessage['expiredBy']): { changed: number } {
+    const why = by ?? (this.options.quitting?.() === true ? 'app' : undefined)
     let changed = 0
     for (const id of ids) {
       const ask = this.store.get(id)
       if (ask?.kind !== 'ask' || ask.state === 'answered' || (ask.expiredAt === undefined) === waiting) continue
-      this.store.update(id, { expiredAt: waiting ? undefined : (this.options.now ?? Date.now)() })
+      this.store.update(
+        id,
+        waiting
+          ? { expiredAt: undefined, expiredBy: undefined }
+          : { expiredAt: (this.options.now ?? Date.now)(), expiredBy: why }
+      )
       changed += 1
     }
     if (changed > 0) this.changed()
@@ -113,7 +127,7 @@ export class MessageService {
   /** Nothing in an exited pane still waits on its asks. */
   paneExited(terminalId: string): void {
     this.delivery.forget(terminalId)
-    this.stopWaiting((ask) => ask.from.terminalId === terminalId)
+    this.stopWaiting((ask) => ask.from.terminalId === terminalId, 'agent')
   }
 
   list(params: ParamsOf<'message.list'>): TaskMessage[] {
@@ -163,14 +177,15 @@ export class MessageService {
     return ask
   }
 
-  private stopWaiting(which: (ask: TaskMessage) => boolean): void {
+  private stopWaiting(which: (ask: TaskMessage) => boolean, by: NonNullable<TaskMessage['expiredBy']>): void {
     const asks = this.store
       .list({ kinds: ['ask'], open: true })
       .filter((ask) => ask.expiredAt === undefined && which(ask))
     if (asks.length > 0)
       this.waiting(
         asks.map((ask) => ask.id),
-        false
+        false,
+        by
       )
   }
 

@@ -6,6 +6,9 @@
  */
 export type RestoredAs = 'shell' | 'agent' | 'restarted' | 'stopped'
 
+/** Why a `stopped` agent pane was not started: its task was done, nothing to resume, or it had failed before the quit. */
+export type StoppedFor = 'task-done' | 'no-conversation' | 'failed'
+
 /** "fresh claude": an agent started over, as the banner and the badge both say it. */
 export function freshAgentLabel(agent: string): string {
   return `fresh ${agent}`

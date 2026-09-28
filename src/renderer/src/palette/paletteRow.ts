@@ -126,7 +126,8 @@ const COMMAND_ICONS: Readonly<Record<string, IconName>> = {
   'forget-worktree': 'remove',
   'discard-file': 'discard',
   'unstage-file': 'minimize',
-  'resume-conversation': 'history'
+  'resume-conversation': 'history',
+  'resume-stopped-agents': 'history'
 }
 
 const PREFIX_ICONS: Readonly<Record<string, IconName>> = {

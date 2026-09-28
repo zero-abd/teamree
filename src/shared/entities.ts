@@ -3,7 +3,7 @@
 
 import type { PeerWorktreeMemory } from './memory'
 import type { AgentActivity } from './paneActivity'
-import type { RestoredAs } from './paneRestore'
+import type { RestoredAs, StoppedFor } from './paneRestore'
 import type { ScreenMenu, ScreenOpinion } from './screenOpinion'
 import type { PeerHandoff, TaskOutcome, TaskStage, WorktreeReport } from './tasks'
 import type { TitleOpinion } from './titleOpinion'
@@ -696,6 +696,10 @@ export type Terminal = {
    * for a terminal opened now; clears the moment the user types into the pane.
    */
   restored?: RestoredAs
+  /** Why a `stopped` restore left its agent ended. */
+  stoppedFor?: StoppedFor
+  /** An ended agent pane whose Resume picks its own conversation back up; absent means Resume would start afresh. */
+  resumable?: true
   /** Running subagents its Claude Code session started; see `src/main/terminals/subagents.ts`. */
   subagents?: Subagent[]
   /** Set on the pane a Run button started, and kept across relaunches; its `exitCode` is the run's result. */

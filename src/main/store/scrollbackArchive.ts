@@ -9,6 +9,7 @@ import { join } from 'node:path'
 import {
   sanitizeRecordedOutput,
   tailFromLineBoundary,
+  upgradedMarks,
   type HostedRecord,
   type RecordedScrollback
 } from '../terminals/scrollbackRecord'
@@ -122,8 +123,8 @@ export class ScrollbackArchive {
       // upgrade does not date every restored pane to the moment of the upgrade.
       const at = typeof recordedAt === 'number' ? recordedAt : endedAt
 
-      // Sanitised and capped again here: the file is the boundary whatever wrote it.
-      const kept = tailFromLineBoundary(sanitizeRecordedOutput(text), MAX_RECORD_BYTES)
+      // Sanitised and capped again here: the file is the boundary whatever wrote it. Older marks are upgraded.
+      const kept = upgradedMarks(tailFromLineBoundary(sanitizeRecordedOutput(text), MAX_RECORD_BYTES))
       if (kept.length === 0) return undefined
       const hosted = hostedRecord(host)
       return {
@@ -232,7 +233,9 @@ function hostedRecord(raw: unknown): HostedRecord | undefined {
   if (typeof session !== 'string' || !/^[A-Za-z0-9_.-]{1,128}$/.test(session)) return undefined
   // Half the cap: the file holds this beside the text and must stay under its own limit.
   const kept =
-    typeof before === 'string' ? tailFromLineBoundary(sanitizeRecordedOutput(before), MAX_RECORD_BYTES / 2) : ''
+    typeof before === 'string'
+      ? upgradedMarks(tailFromLineBoundary(sanitizeRecordedOutput(before), MAX_RECORD_BYTES / 2))
+      : ''
   return kept.length === 0 ? { session } : { session, before: kept }
 }
 

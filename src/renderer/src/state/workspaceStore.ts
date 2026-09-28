@@ -116,6 +116,7 @@ import {
 } from '../panes/watchedPanes'
 import { tabAfter } from '../workspace/paneTabs'
 import { focusAfterClose } from '../panes/paneGroups'
+import { resumableAgents, stoppedAgentsText } from '../panes/resumeAll'
 import { awaitWorktreeReady } from './awaitWorktreeReady'
 import {
   relayLauncherCommand,
@@ -313,6 +314,7 @@ export type Notice = {
     | { label: string; hide: keyof Sides }
     | { label: string; undo: UndoTarget }
     | { label: string; copy: string }
+    | { label: string; resume: readonly string[] }
   /** What the notice is about; a newer notice with the same key replaces it, and success clears it. */
   key?: string
   /** A git write refused by a held `index.lock`: Retry, and Clear Lock when `clearable`. */
@@ -695,6 +697,8 @@ type WorkspaceState = {
     terminalId: string,
     options?: { task?: boolean; resume?: string; fresh?: boolean }
   ) => Promise<void>
+  /** Resume All: each pane's agent picks its own conversation back up; a pane with none is left as it is. */
+  resumeAgents: (terminalIds: readonly string[]) => Promise<void>
   /** A new shell: a tab of the group holding `tabOf`, else a pane where there is room. */
   createTerminal: (worktreeId: string, tabOf?: string) => Promise<void>
   /**
@@ -1023,6 +1027,7 @@ let goToSeq = 0
 
 /** The notice a failed teamwork push leaves, cleared by the next one that lands. */
 const pushNoticeKey = (projectId: string): string => `teamwork-push:${projectId}`
+const RESUME_ALL_KEY = 'resume-all'
 const pullNoticeKey = (projectId: string): string => `teamwork-pull:${projectId}`
 
 /** How long a git write refused by a held lock waits before its one quiet retry. */
@@ -2111,6 +2116,13 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         refresher.request(refreshTargets({ teammates: true, overlaps: true, memory: true }))
         await refresher.flush()
 
+        // Agents the last run left ended that can still pick their conversations up: one notice for all of them.
+        const stopped = resumableAgents(Object.values(get().terminals)).filter((terminal) => terminal.restored)
+        if (stopped.length > 0) {
+          const resume = stopped.map((terminal) => terminal.id)
+          notify(stoppedAgentsText(stopped.length), 'info', { label: 'Resume All', resume }, RESUME_ALL_KEY)
+        }
+
         if (!get().activeWorktreeId) {
           // The last window's tabs, in order, the front one left in front: main restores the panes and
           // resumes the agents in them. A worktree removed since has no tab to reopen; one whose
@@ -2826,6 +2838,19 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       } catch (error) {
         failed('Could not run this pane again')(error)
       }
+    },
+
+    async resumeAgents(terminalIds) {
+      clearNotices(RESUME_ALL_KEY)
+      const results = await Promise.allSettled(
+        terminalIds.map((terminalId) => runtimeClient.call('terminal.relaunch', { terminalId, resumeOnly: true }))
+      )
+      const resumed = results.flatMap((result) => (result.status === 'fulfilled' ? [result.value] : []))
+      set((state) => ({
+        terminals: { ...state.terminals, ...Object.fromEntries(resumed.map((terminal) => [terminal.id, terminal])) }
+      }))
+      const missed = results.length - resumed.length
+      if (missed > 0) notify(`Could not resume ${missed} agent${missed === 1 ? '' : 's'}`)
     },
 
     /**

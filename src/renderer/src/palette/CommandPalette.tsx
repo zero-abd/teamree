@@ -45,6 +45,7 @@ import { useSearchStore } from '../workspace/rightPanel/searchStore'
 import { useFileMatches } from './useFileMatches'
 import { lineQuery } from './lineQuery'
 import { runOffers } from '../workspace/runButtons'
+import { resumableAgents } from '../panes/resumeAll'
 import type { RunKind } from '@shared/entities'
 import { useFocusedChange } from './useFocusedChange'
 import { highlight, rowIcon, rowStatus, STATUS_CLASS } from './paletteRow'
@@ -526,6 +527,9 @@ export function CommandPalette({
         break
       case 'resume-conversation':
         if (active) store.openDialog({ kind: 'resume-conversation', worktreeId: active.id })
+        break
+      case 'resume-stopped-agents':
+        void store.resumeAgents(resumableAgents(Object.values(store.terminals)).map((terminal) => terminal.id))
         break
       case 'discard-file':
         if (active && change) store.openDialog({ kind: 'confirm-discard', worktreeId: active.id, path: change.path })

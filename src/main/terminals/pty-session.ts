@@ -2,7 +2,7 @@
 // The session owns the only reference to the node-pty handle.
 
 import { basename } from 'node:path'
-import type { RestoredAs } from '../../shared/paneRestore'
+import type { RestoredAs, StoppedFor } from '../../shared/paneRestore'
 import { spawn } from 'node-pty'
 import type { IDisposable, IPty, IPtyForkOptions } from 'node-pty'
 import type { AgentEvent, ListeningPort, RunKind, Terminal } from '../../shared/entities'
@@ -120,6 +120,8 @@ export type PtySessionInit = {
   scrollbackCapBytes?: number
   /** Set when this session is a previous run's pane being brought back. */
   restored?: RestoredAs
+  /** Why a `stopped` restore did not start its agent. */
+  stoppedFor?: StoppedFor
   /**
    * What the pane printed the last time it was open. Kept apart from the live
    * buffer so no byte of it can be mistaken for one this session produced.
@@ -337,6 +339,7 @@ export class PtySession {
       ...(this.draining === undefined ? {} : { draining: true }),
       ...(this.exitCode === undefined ? {} : { exitCode: this.exitCode }),
       ...(this.restored === undefined ? {} : { restored: this.restored }),
+      ...(this.stoppedFor === undefined ? {} : { stoppedFor: this.stoppedFor }),
       ...(this.agent === undefined ? {} : { agent: this.agent }),
       ...(foregroundAgent === undefined ? {} : { foregroundAgent }),
       ...(this.label === undefined ? {} : { label: this.label }),
@@ -804,6 +807,10 @@ export class PtySession {
   /** Restored as an agent pane that was not started; see `RestoredAs`. */
   get leftStopped(): boolean {
     return this.init.restored === 'stopped'
+  }
+
+  get stoppedFor(): StoppedFor | undefined {
+    return this.leftStopped ? this.init.stoppedFor : undefined
   }
 
   /**

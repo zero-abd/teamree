@@ -818,7 +818,9 @@ export const Params = {
     /** Starts an ended agent over under a new id instead of resuming its conversation. */
     fresh: z.boolean().optional(),
     /** Resumes this conversation of the pane's agent (`agent.conversations`) in the pane instead of a fresh one. */
-    resume: agentSessionId.optional()
+    resume: agentSessionId.optional(),
+    /** Refused, and the pane left as it is, unless the agent picks its own conversation back up. */
+    resumeOnly: z.boolean().optional()
   }),
   /** `[Image #N]` in a Claude Code pane, as the file pasted; see docs/plans/pasted-image-preview.md. */
   terminalPastedImage: z.object({

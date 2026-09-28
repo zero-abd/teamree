@@ -37,4 +37,6 @@ export type TaskMessage = {
   answeredBy?: MessageParty
   /** When the asker stopped waiting: timed out, interrupted, or its pane or the app went. */
   expiredAt?: number
+  /** Why, when known: the asking agent's pane ended, or the app quit under it. Absent reads as timed out. */
+  expiredBy?: 'agent' | 'app'
 }

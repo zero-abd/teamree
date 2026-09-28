@@ -1381,3 +1381,34 @@ describe('where you have been', () => {
     expect(filterPalette(items(), 'npm run').map(paletteKey)[0]).toBe('pane:t-dev')
   })
 })
+
+// After a quit with a fleet of agents, each one had to be resumed by hand.
+describe('Resume Stopped Agents', () => {
+  const ended = (id: string, extra: Partial<Terminal> = {}): Terminal => ({
+    id,
+    worktreeId: 'w1',
+    title: 'claude',
+    cwd: '/r',
+    shell: '/bin/zsh',
+    cols: 80,
+    rows: 24,
+    running: false,
+    busy: false,
+    lastOutputAt: 0,
+    agent: 'claude',
+    exitCode: 1,
+    ...extra
+  })
+  const row = (terminals: Terminal[]) =>
+    buildPaletteItems(context({ terminals })).find(
+      (item) => item.kind === 'action' && item.id === 'resume-stopped-agents'
+    )
+
+  it('is offered with a count when agents can pick their conversations back up, and not otherwise', () => {
+    expect(row([ended('a', { resumable: true }), ended('b', { resumable: true }), ended('c')])).toMatchObject({
+      label: 'Resume Stopped Agents',
+      hint: '2'
+    })
+    expect(row([ended('c'), ended('d', { restored: 'stopped', stoppedFor: 'no-conversation' })])).toBeUndefined()
+  })
+})

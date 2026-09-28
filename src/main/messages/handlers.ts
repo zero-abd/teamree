@@ -39,6 +39,7 @@ export function registerMessageHandlers(
     changedPaths: async (worktreeId) =>
       (await deps.git.worktreeChanges({ worktreeId, base: true })).changes.map((change) => change.path),
     onChange: () => workspaceEvents.emit({ type: 'messages' }),
+    quitting: () => manager.shuttingDown,
     ...(deps.onAsk === undefined ? {} : { onAsk: deps.onAsk })
   })
 

@@ -78,11 +78,18 @@ export function AskForYou({ ask, compact = false }: { ask: TaskMessage; compact?
       role="group"
       aria-label={`Question #${ask.id}`}
     >
-      {lapsed ? <p className="worktree__ask-lapsed">Timed out · the agent moved on</p> : null}
+      {lapsed ? <p className="worktree__ask-lapsed">{lapsedWords(ask)}</p> : null}
       <p className="worktree__ask-text" title={ask.text}>
         {ask.text}
       </p>
       {actions}
     </div>
   )
+}
+
+/** Why nothing waits on the ask any more: only a timeout is said as one. */
+export function lapsedWords(ask: Pick<TaskMessage, 'expiredBy'>): string {
+  if (ask.expiredBy === 'app') return 'Ask ended with the app'
+  if (ask.expiredBy === 'agent') return 'The agent stopped'
+  return 'Timed out · the agent moved on'
 }

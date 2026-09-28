@@ -8,6 +8,7 @@ import { UnsavedDot } from '../files/FileBar'
 import { usePaneDrag, useTabDrag } from '../panes/paneDrag'
 import { shownOf, type PaneGroup } from '../panes/paneGroups'
 import { collectTerminalIds } from '../panes/paneLayout'
+import { resumableAgents } from '../panes/resumeAll'
 import { usePaneMenu } from './paneMenu'
 import { paneTabs, paneTabTitle, type PaneTab } from './paneTabs'
 import { RunButtons } from './runButtons'
@@ -329,6 +330,32 @@ function Tab({ tab, shown, unread, unsaved, dragged, renaming, ...on }: TabProps
   )
 }
 
+/** Resume All, when more than one of the worktree's ended agents can pick its conversation back up. */
+function ResumeAll({ worktreeId }: { worktreeId: string }): React.JSX.Element | null {
+  // Joined, so a store change that leaves the set alone does not render the head again.
+  const joined = useWorkspaceStore((state) =>
+    resumableAgents(Object.values(state.terminals), worktreeId)
+      .map((terminal) => terminal.id)
+      .join(' ')
+  )
+  const ids = joined === '' ? [] : joined.split(' ')
+  const resumeAgents = useWorkspaceStore((state) => state.resumeAgents)
+  if (ids.length < 2) return null
+  return (
+    <div className="run-buttons">
+      <button
+        type="button"
+        className="run-buttons__run"
+        title={`Resume ${ids.length} agents`}
+        onClick={() => void resumeAgents(ids)}
+      >
+        <Icon name="history" size={14} />
+        Resume All
+      </button>
+    </div>
+  )
+}
+
 /** The runs, maximize and the splits, pinned to the head's end; with no panes yet, `+` too. */
 function HeadActions({ worktreeId, modifier }: { worktreeId: string; modifier: PlatformModifier }): React.JSX.Element {
   // Refused only for a worktree known to have no checkout yet.
@@ -344,6 +371,7 @@ function HeadActions({ worktreeId, modifier }: { worktreeId: string; modifier: P
 
   return (
     <div className="tabs__actions">
+      <ResumeAll worktreeId={worktreeId} />
       {noCheckout ? null : <RunButtons worktreeId={worktreeId} />}
       <div className="tabs__layout">
         <button

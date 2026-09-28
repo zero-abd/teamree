@@ -8,8 +8,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import type { Layout } from '../../shared/entities'
 import type { ConversationEvidence } from './agent-conversations'
 import { canSpawnPty, waitUntil } from './pty-test-support'
-import { agentStoppedMark } from './scrollbackRecord'
-import { NO_CONVERSATION, TASK_DONE, type TerminalRecord } from './session-restore'
+import type { TerminalRecord } from './session-restore'
 import { TerminalSessionManager, type LayoutRepository, type SessionRepository } from './session-manager'
 
 const describePty = canSpawnPty() ? describe : describe.skip
@@ -24,8 +23,8 @@ afterEach(async () => {
   await Promise.all(scratch.splice(0).map((dir) => rm(dir, { recursive: true, force: true })))
 })
 
-/** A program named after a real agent that prints its argv, one word per line, and exits. */
-async function fakeAgent(name: 'claude' | 'codex'): Promise<{ checkout: string; launch: string }> {
+/** A program named after a real agent that prints its argv, one word per line, and exits with `status`. */
+async function fakeAgent(name: 'claude' | 'codex', status = 0): Promise<{ checkout: string; launch: string }> {
   const checkout = await mkdtemp(path.join(os.tmpdir(), `teamree-first-prompt-${name}-`))
   scratch.push(checkout)
   const onWindows = process.platform === 'win32'
@@ -37,7 +36,7 @@ async function fakeAgent(name: 'claude' | 'codex'): Promise<{ checkout: string; 
       'utf8'
     )
   } else {
-    await writeFile(binary, '#!/bin/sh\nfor arg in "$@"; do printf "ARG[%s]\\n" "$arg"; done\n', 'utf8')
+    await writeFile(binary, `#!/bin/sh\nfor arg in "$@"; do printf "ARG[%s]\\n" "$arg"; done\nexit ${status}\n`, 'utf8')
     await chmod(binary, 0o755)
   }
   return { checkout, launch: `"${binary}"` }
@@ -146,9 +145,10 @@ describePty('the task as the first prompt', () => {
 
   /** A first launch handed the task, quit; the stores are what a relaunch then asks. */
   async function ranOnce(
-    name: 'claude' | 'codex' = 'claude'
+    name: 'claude' | 'codex' = 'claude',
+    status = 0
   ): Promise<{ checkout: string; stores: ReturnType<typeof repositories>; terminalId: string }> {
-    const { checkout, launch } = await fakeAgent(name)
+    const { checkout, launch } = await fakeAgent(name, status)
     const stores = repositories()
     const first = manager(stores, checkout, 'absent')
     const opened = first.create({ worktreeId: 'wt_1', command: launch, prompt: TASK })
@@ -178,9 +178,12 @@ describePty('the task as the first prompt', () => {
       const printed = await printedArgs(next, terminalId)
 
       expect(printed).toEqual([])
-      expect(next.read(terminalId)).toContain(agentStoppedMark(NO_CONVERSATION))
+      // The end block says why, once; the record says nothing about it.
+      expect(next.read(terminalId)).not.toContain('not resumed')
       const pane = next.list('wt_1')[0]
       expect(pane?.restored).toBe('stopped')
+      expect(pane?.stoppedFor).toBe('no-conversation')
+      expect(pane?.resumable).toBeUndefined()
       expect(pane?.agent).toBe('claude')
       expect(pane?.title).toBe('claude')
       // Still the agent's pane: the next launch asks the same question.
@@ -199,8 +202,54 @@ describePty('the task as the first prompt', () => {
       expect(next.restoreSessions()).toEqual({ restored: 1, resumed: 0 })
 
       expect(await printedArgs(next, terminalId)).toEqual([])
-      expect(next.read(terminalId)).toContain(agentStoppedMark(TASK_DONE))
-      expect(next.list('wt_1')[0]?.restored).toBe('stopped')
+      expect(next.read(terminalId)).not.toContain('not resumed')
+      const pane = next.list('wt_1')[0]
+      expect(pane?.restored).toBe('stopped')
+      expect(pane?.stoppedFor).toBe('task-done')
+      // Its Resume would start the agent afresh, so it offers none.
+      expect(pane?.resumable).toBeUndefined()
+    },
+    TEST_TIMEOUT_MS
+  )
+
+  it(
+    'is not given to an agent that failed before the quit, which comes back failed and resumes its conversation',
+    async () => {
+      const { checkout, stores, terminalId } = await ranOnce('claude', 3)
+      expect(stores.records.get(terminalId)?.exitCode).toBe(3)
+
+      const next = manager(stores, checkout, 'present')
+      expect(next.restoreSessions()).toEqual({ restored: 1, resumed: 0 })
+      expect(await printedArgs(next, terminalId)).toEqual([])
+      const pane = next.list('wt_1')[0]
+      expect(pane).toMatchObject({ restored: 'stopped', stoppedFor: 'failed', exitCode: 3, resumable: true })
+
+      // Its Resume picks the conversation up, and the task is not sent again.
+      await next.relaunch({ terminalId })
+      const printed = await printedArgs(next, terminalId)
+      expect(printed).toContain('--resume')
+      expect(printed).not.toContain(TASK)
+    },
+    TEST_TIMEOUT_MS
+  )
+
+  it(
+    'says an ended agent with no conversation behind it cannot be resumed, and one with it can',
+    async () => {
+      const { checkout, launch } = await fakeAgent('claude', 1)
+      const without = manager(repositories(), checkout, 'absent')
+      const lost = without.create({ worktreeId: 'wt_1', command: launch })
+      await printedArgs(without, lost.id)
+      expect(without.list('wt_1')[0]).toMatchObject({ exitCode: 1 })
+      expect(without.list('wt_1')[0]?.resumable).toBeUndefined()
+      // Resume All's relaunch starts nothing in its place.
+      await expect(without.relaunch({ terminalId: lost.id, resumeOnly: true })).rejects.toThrow('nothing to resume')
+      expect(without.list('wt_1')[0]?.running).toBe(false)
+
+      const kept = manager(repositories(), checkout, 'present')
+      const had = kept.create({ worktreeId: 'wt_1', command: launch, prompt: TASK })
+      await printedArgs(kept, had.id)
+      expect(kept.list('wt_1')[0]?.resumable).toBe(true)
     },
     TEST_TIMEOUT_MS
   )

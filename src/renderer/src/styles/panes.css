@@ -908,12 +908,16 @@ body.is-dragging-pane * {
   margin-top: var(--s2);
 }
 
-/* A scrollback boundary main wrote as a dim rule line, drawn over it as the marker; xterm sets `display` inline. */
-.xterm-decoration.pane-marker {
-  display: flex !important;
+/* A scrollback boundary main wrote as a dim rule line, drawn over it as the marker. The decoration's own
+   `display` is xterm's: it hides the rule once its line scrolls off the screen. */
+.pane-marker-row {
+  pointer-events: none;
+}
+
+.pane-marker-row > .pane-marker {
+  height: 100%;
   padding: 0 var(--s1);
   background: var(--term-bg);
-  pointer-events: none;
 }
 
 /* The pane's output as text, in the Show Log sheet. */
