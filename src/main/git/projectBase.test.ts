@@ -238,16 +238,20 @@ describe('landing onto a main origin moved', () => {
     expect(await context.repo.git(['show', 'origin/main:CHANGELOG.md'])).toBe('footer copy\ncart rounding')
   })
 
-  it('reads a plan’s conflicts against origin’s tip when main is behind it', async () => {
+  it('reads a plan’s conflicts, and updates the task, against origin’s tip when main is behind it', async () => {
     const context = await setup()
     const push = await teammate(context)
     const worktree = await taskWriting(context, 'Fix cart', 'CHANGELOG.md', 'cart rounding\n')
     await push('CHANGELOG.md', 'footer copy\n')
     await context.repo.git(['fetch', '--quiet', 'origin'])
+    const before = await context.repo.git(['rev-parse', 'main'])
 
     const plan = await context.service.worktreeMergeIntoBase({ worktreeId: worktree.id, dryRun: true })
-
     expect(plan.conflicts).toEqual(['CHANGELOG.md'])
+
+    const update = await context.service.worktreeUpdate({ worktreeId: worktree.id, landing: true })
+    expect(update).toMatchObject({ outcome: 'conflicts', conflicts: ['CHANGELOG.md'] })
+    expect(await context.repo.git(['rev-parse', 'main'])).toBe(before)
   })
 
   it('puts main back when the push fails after the merge, and says so', async () => {

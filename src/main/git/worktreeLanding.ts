@@ -369,8 +369,7 @@ export async function mergeIntoBase(runner: GitRunner, options: MergeOptions): P
     return { worktreeId: options.worktreeId, into, checkout: cwd, commits, fastForward, dirty, merged: false }
   }
   if (options.dryRun) {
-    // The landing fast-forwards to origin first, so that is what the task meets.
-    const onto = top && (await originMoved(read, into)) === 'behind' ? originOf(into) : into
+    const onto = top ? await landingOnto(runner, cwd, into) : into
     const plan = await planOnto(onto)
     if (plan.fastForward || plan.commits.length === 0) return plan
     const preview = await readMergePreview(runner, {
@@ -438,6 +437,13 @@ export async function mergeIntoBase(runner: GitRunner, options: MergeOptions): P
 }
 
 const originOf = (branch: string): string => `refs/remotes/${REMOTE}/${branch}`
+
+/** What a top-level landing into `branch` meets: origin's when the checkout's is only behind it, as the landing fast-forwards first. */
+export async function landingOnto(runner: GitRunner, repoPath: string, branch: string): Promise<string> {
+  const read = (args: string[]): Promise<{ exitCode: number }> =>
+    runner.tryRun({ args, cwd: repoPath, readOnly: true, timeoutMs: 30_000 })
+  return (await originMoved(read, branch)) === 'behind' ? `${REMOTE}/${branch}` : branch
+}
 
 /** How origin's copy of the branch has moved past the checkout's; null when it has nothing the checkout lacks. */
 async function originMoved(
