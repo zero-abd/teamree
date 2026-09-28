@@ -29,7 +29,7 @@ vi.mock('../../runtimeClient/currentRuntimeClient', () => ({
 }))
 vi.mock('../../shell/openInBrowser', () => ({ openInBrowser: (url: string) => openInBrowser(url) }))
 
-const { useWorkspaceStore } = await import('../../state/workspaceStore')
+const { LOCK_RETRY_MS, useWorkspaceStore } = await import('../../state/workspaceStore')
 const { ChangesTab } = await import('./ChangesTab')
 const { canDiscard } = await import('./sourceControl')
 const { useScmView } = await import('./scmView')
@@ -552,6 +552,40 @@ describe('committing', () => {
     expect(labelled('Changes')).toBeNull()
     fireEvent.click(screen.getByText('Commit All 2,000', { selector: 'button' }))
     expect(call).toHaveBeenCalledWith('worktree.commit', { worktreeId: 'w1', message: 'Rank', all: true })
+  })
+
+  it('empties the box once a commit held by a lock lands on Clear Lock, as any commit that lands does', async () => {
+    vi.useFakeTimers()
+    try {
+      let held = true
+      const lockPath = '/wt/.git/index.lock'
+      call.mockImplementation((method: string) => {
+        if (method === 'worktree.commit' && held)
+          return Promise.reject(Object.assign(new Error('locked'), { data: { kind: 'locked', lockPath } }))
+        if (method === 'worktree.commit')
+          return Promise.resolve({ worktreeId: 'w1', sha: 'b'.repeat(40), shortSha: 'bbbbbbb', message: 'Rate to 9' })
+        if (method === 'worktree.lock') return Promise.resolve({ lockPath, clearable: true })
+        if (method === 'worktree.clearLock') {
+          held = false
+          return Promise.resolve({ lockPath })
+        }
+        return new Promise(() => {})
+      })
+      withChanges(rows)
+      render(<ChangesTab />)
+      message('Rate to 9')
+      const box = screen.getByRole('textbox', { name: 'Commit message' }) as HTMLTextAreaElement
+
+      fireEvent.click(screen.getByRole('button', { name: 'Commit All 3' }))
+      await act(async () => vi.advanceTimersByTimeAsync(LOCK_RETRY_MS))
+      expect(box.value).toBe('Rate to 9')
+
+      await act(async () => useWorkspaceStore.getState().clearLock('w1', lockPath))
+      expect(call).toHaveBeenLastCalledWith('worktree.commit', { worktreeId: 'w1', message: 'Rate to 9', all: true })
+      expect(box.value).toBe('')
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('counts what it commits once a file is staged', () => {
@@ -1445,6 +1479,39 @@ describe('discarding a file', () => {
       </>
     )
   }
+
+  it('shows the lines a hunk discard throws away, the first eight, then how many more', () => {
+    seed()
+    const line = (kind: 'added' | 'removed' | 'context', text: string) => ({
+      kind,
+      text,
+      oldNumber: null,
+      newNumber: null,
+      noNewline: false
+    })
+    const lines = [
+      line('context', 'const rate = 1'),
+      ...Array.from({ length: 6 }, (_, at) => line('removed', `old ${at}`)),
+      ...Array.from({ length: 6 }, (_, at) => line('added', `new ${at}`))
+    ]
+    const hunk = { header: '@@ -1,7 +1,7 @@', oldStart: 1, oldCount: 7, newStart: 1, newCount: 7, lines }
+    render(<ConfirmDiscardDialog worktreeId="w1" path="src/cart.js" hunk={hunk} />)
+
+    const preview = screen.getByRole('dialog', { name: 'Discard this hunk of src/cart.js?' })
+    expect(within(preview).queryByText('@@ -1,7 +1,7 @@')).toBeNull()
+    expect(within(preview).queryByText(/const rate/)).toBeNull()
+    expect([...preview.querySelectorAll('.confirm__hunkLine')].map((row) => row.textContent)).toEqual([
+      '-old 0',
+      '-old 1',
+      '-old 2',
+      '-old 3',
+      '-old 4',
+      '-old 5',
+      '+new 0',
+      '+new 1'
+    ])
+    expect(within(preview).getByText('+4 more')).toBeTruthy()
+  })
 
   it('asks, naming the file, and only then restores it', () => {
     withRows()

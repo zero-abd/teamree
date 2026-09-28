@@ -1,7 +1,7 @@
 // Condenses a WorktreeStatus into the few facts a one-line sidebar row can
 // actually show, and decides how loud each of them should be.
 
-import type { WorktreeStatus } from '@shared/entities'
+import { changedFiles, type WorktreeStatus } from '@shared/entities'
 
 export type StatusTone = 'quiet' | 'dirty' | 'conflict'
 
@@ -24,7 +24,7 @@ export function summarizeWorktreeStatus(
   if (!status) return null
   if (status.missing) return { ahead: 0, behind: 0, dirty: 0, conflicted: 0, tone: 'conflict', description: 'missing' }
 
-  const dirty = status.staged + status.unstaged + status.untracked
+  const dirty = changedFiles(status)
   const tone: StatusTone = status.conflicted > 0 ? 'conflict' : dirty > 0 ? 'dirty' : 'quiet'
 
   const parts: string[] = []

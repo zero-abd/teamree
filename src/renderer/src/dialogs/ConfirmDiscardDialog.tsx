@@ -1,5 +1,5 @@
-// Asked before any discard from the Changes tab. It names the file, or counts the files, and says where an
-// untracked one goes; a copy is kept first, so the notice after it offers Undo.
+// Asked before any discard from the Changes tab. It names the file, counts the files or shows a hunk's lines, and
+// says where an untracked one goes; a copy is kept first, so the notice after it offers Undo.
 
 import type { PatchHunk } from '@shared/patch'
 import { Confirm } from './Confirm'
@@ -47,7 +47,24 @@ export function ConfirmDiscardDialog({
         else void discardChange(worktreeId, path, hunk)
       }}
     >
-      {hunk === undefined ? null : <p className="confirm__path">{hunk.header}</p>}
+      {hunk === undefined ? null : <HunkPreview hunk={hunk} />}
     </Confirm>
+  )
+}
+
+const PREVIEW_LINES = 8
+
+function HunkPreview({ hunk }: { hunk: PatchHunk }): React.JSX.Element {
+  const changed = hunk.lines.filter((line) => line.kind !== 'context')
+  const more = changed.length - PREVIEW_LINES
+  return (
+    <div className="confirm__hunk">
+      {changed.slice(0, PREVIEW_LINES).map((line, index) => (
+        <div key={index} className={`confirm__hunkLine confirm__hunkLine--${line.kind}`}>
+          {`${line.kind === 'added' ? '+' : '-'}${line.text}`}
+        </div>
+      ))}
+      {more > 0 ? <div className="confirm__hunkMore">{`+${more} more`}</div> : null}
+    </div>
   )
 }

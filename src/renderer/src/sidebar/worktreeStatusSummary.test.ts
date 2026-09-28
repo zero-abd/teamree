@@ -26,6 +26,12 @@ describe('summarizeWorktreeStatus', () => {
     expect(summary?.tone).toBe('dirty')
   })
 
+  it('counts files, not staged and unstaged halves', () => {
+    const summary = summarizeWorktreeStatus(status({ staged: 2, unstaged: 2, untracked: 25, changed: 27 }))
+    expect(summary?.dirty).toBe(27)
+    expect(summary?.description).toBe('27 uncommitted')
+  })
+
   it('lets conflicts outrank ordinary dirt', () => {
     expect(summarizeWorktreeStatus(status({ unstaged: 4, conflicted: 1 }))?.tone).toBe('conflict')
   })

@@ -4,7 +4,7 @@
 import { useEffect, useState } from 'react'
 import { MAX_AGENT_ARGS_CHARS } from '@shared/agentLaunch'
 import { branchPrefixFor } from '@shared/branchName'
-import type { WorktreeIssue } from '@shared/entities'
+import { changedFiles, type WorktreeIssue } from '@shared/entities'
 import { permissionModesFor } from '@shared/permissionMode'
 import { formatChord, windowModifier } from '../keyboard/platformModifier'
 import { useRuntimeSettings } from '../settings/runtimeSettings'
@@ -136,8 +136,7 @@ export function TaskComposerDialog({
   const startedFrom = parent?.branch ?? startPoint.text.trim()
   // Only the base is fetched in the background, so only it can be said to be old.
   const age = startedFrom === project.baseRef ? startPointAge(project, now) : null
-  const leftBehind =
-    parentStatus === undefined ? 0 : parentStatus.staged + parentStatus.unstaged + parentStatus.untracked
+  const leftBehind = parentStatus === undefined ? 0 : changedFiles(parentStatus)
   // Bounded by the agent's command line; a paste past it is refused, not cut.
   const tooLong = task.trim().length > MAX_AGENT_ARGS_CHARS
   const canSubmit = hasTask && !tooLong && startedFrom.length > 0 && problem === null && !saving

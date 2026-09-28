@@ -1,6 +1,6 @@
 // Where a branch lands: a pull request on the host, which commits and pushes first, or a merge into the base (a child's parent) here.
 
-import type { WorktreeLanding, WorktreeStatus } from '@shared/entities'
+import { changedFiles, type WorktreeLanding, type WorktreeStatus } from '@shared/entities'
 import type { PushState } from '../../state/workspaceStore'
 
 /** `blocked` says why it cannot run yet (`1 conflicted`); `uncommitted` is what the dialog commits first. */
@@ -14,7 +14,7 @@ export type LandOffer =
 export function landOffer(landing: WorktreeLanding | undefined, status: WorktreeStatus | undefined): LandOffer | null {
   if (landing === undefined || status === undefined || status.missing) return null
   if (landing.merged) return { kind: 'merged' }
-  const uncommitted = status.staged + status.unstaged + status.untracked + status.conflicted
+  const uncommitted = changedFiles(status) + status.conflicted
   if (landing.parent !== undefined || landing.host === null) {
     const into = mergeTarget(landing)
     if (status.conflicted > 0) return { ...into, blocked: `${status.conflicted} conflicted` }

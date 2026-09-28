@@ -805,8 +805,11 @@ type WorkspaceState = {
   stagePaths: (paths: readonly string[]) => void
   /** Unticks everything and takes every path git holds out of the index. The working tree is never touched. */
   unstageAll: (worktreeId: string) => Promise<void>
-  /** Commits what `commitScope` names, or rewrites the last commit with it; true when it landed. */
-  commitStaged: (message: string, amend?: boolean) => Promise<boolean>
+  /**
+   * Commits what `commitScope` names, or rewrites the last commit with it; true when it landed.
+   * `landed` runs once it lands, a Retry or Clear Lock past a held lock included.
+   */
+  commitStaged: (message: string, amend?: boolean, landed?: () => void) => Promise<boolean>
   /** Forgets the worktree's refused commit; with `error`, records it when a hook refused and says so. True when one did. */
   noteCommit: (worktreeId: string, error?: unknown) => boolean
   /** Puts one hunk into the index, or takes it out. The hunk is exactly what was on screen; the runtime refuses it if the file moved on. */
@@ -1143,7 +1146,8 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     message: string,
     paths: string[] | undefined,
     all: boolean,
-    amend = false
+    amend = false,
+    landed?: () => void
   ): Promise<boolean> {
     set({ committing: true })
     get().noteCommit(worktreeId)
@@ -1165,10 +1169,9 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       // Nothing is left ticked; the list refetches on the invalidation the runtime publishes, and
       // doing it here too would be a second way for this window to disagree with the others.
       set((state) => ({ stagedPaths: { ...state.stagedPaths, [worktreeId]: [] }, selectedChangePath: null }))
-      return true
     } catch (error) {
       if (
-        !(await heldLock(worktreeId, error, () => commit(worktreeId, message, paths, all, amend))) &&
+        !(await heldLock(worktreeId, error, () => commit(worktreeId, message, paths, all, amend, landed))) &&
         !get().noteCommit(worktreeId, error)
       ) {
         failed('Could not commit')(error)
@@ -1177,6 +1180,8 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     } finally {
       set({ committing: false })
     }
+    landed?.()
+    return true
   }
 
   // One OS sheet at a time: a second press while it is up would queue another.
@@ -3412,7 +3417,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       return true
     },
 
-    async commitStaged(message, amend = false) {
+    async commitStaged(message, amend = false, landed) {
       const worktreeId = get().activeWorktreeId
       if (!worktreeId) return false
       const ticked = get().stagedPaths[worktreeId] ?? []
@@ -3423,7 +3428,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       // 'all' names none either: the list stops at its cap, and git's own -A does not.
       const paths = scope === 'ticked' ? ticked : undefined
       if (scope === 'all' && rows.length === 0 && !amend) return false
-      return commit(worktreeId, message, paths, scope === 'all' && rows.length > 0, amend)
+      return commit(worktreeId, message, paths, scope === 'all' && rows.length > 0, amend, landed)
     },
 
     async applyHunk(worktreeId, path, hunk, staged) {

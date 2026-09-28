@@ -1,24 +1,25 @@
 // The tabs that pick the right panel's content and the button that folds it: words atop the open
 // panel, icons down the right edge when closed, so the panel stays findable.
 
+import { changedFiles, type WorktreeStatus } from '@shared/entities'
 import type { RightPanelTab } from './rightPanelState'
 import { Icon } from '../../icons/Icon'
 import { IconButton } from '../../ui/Button'
 import { Tooltip } from '../../ui/Tooltip'
 
 /** What the Changes badge counts: what a commit would deal with; ahead/behind belong to the status bar. */
-export function changedCount(
-  status: { staged: number; unstaged: number; untracked: number; conflicted: number } | undefined
-): number {
+export function changedCount(status: RailStatus | undefined): number {
   if (!status) return 0
-  return status.staged + status.unstaged + status.untracked + status.conflicted
+  return changedFiles(status) + status.conflicted
 }
+
+type RailStatus = Pick<WorktreeStatus, 'staged' | 'unstaged' | 'untracked' | 'conflicted' | 'changed'>
 
 type RightRailProps = {
   open: boolean
   tab: RightPanelTab
   /** Whatever the status chips count, for the badge on Changes. */
-  status: { staged: number; unstaged: number; untracked: number; conflicted: number } | undefined
+  status: RailStatus | undefined
   onPick: (tab: RightPanelTab) => void
   onToggle: () => void
 }

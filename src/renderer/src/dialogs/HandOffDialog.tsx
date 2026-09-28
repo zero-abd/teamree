@@ -2,7 +2,7 @@
 // uncommitted work when asked, pushes the branch, then offers it.
 
 import { useEffect, useMemo, useState } from 'react'
-import { teammatesHeard } from '@shared/entities'
+import { changedFiles, teammatesHeard } from '@shared/entities'
 import { harnessName } from '../agents/harnesses'
 import { runtimeClient } from '../runtimeClient/currentRuntimeClient'
 import { useWorkspaceStore } from '../state/workspaceStore'
@@ -56,7 +56,7 @@ export function HandOffDialog({ worktreeId }: { worktreeId: string }): React.JSX
 
   if (worktree === undefined) return null
   const chosen = to ?? (teammates.find((person) => person.connected) ?? teammates[0])?.handle ?? ''
-  const uncommitted = Math.max(pending, status === undefined ? 0 : status.staged + status.unstaged + status.untracked)
+  const uncommitted = Math.max(pending, status === undefined ? 0 : changedFiles(status))
   const files = `${uncommitted} ${uncommitted === 1 ? 'File' : 'Files'}`
   const shownMessage = message ?? `WIP: ${commitSuggestion(worktree)?.text ?? worktree.name}`
   const committing = uncommitted > 0 && include

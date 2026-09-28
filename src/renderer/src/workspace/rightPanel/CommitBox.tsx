@@ -45,8 +45,7 @@ export function CommitBox({
   const run = (kind: CommitChoice['kind']): void => {
     if (!ready) return
     // The message is the one thing the app cannot reconstruct; only a commit that landed clears it.
-    void commitStaged(text, amending).then((landed) => {
-      if (!landed) return
+    void commitStaged(text, amending, () => {
       if (amending) setAmend(worktreeId, null)
       else setMessage('')
       if (kind === 'push') void pushActiveWorktree(worktreeId)
