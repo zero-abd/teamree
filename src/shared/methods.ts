@@ -71,6 +71,7 @@ import type {
 import { MAX_AGENT_ARGS_CHARS } from './agentLaunch'
 import { MAX_FILE_PANE_BYTES } from './filePane'
 import { TaskParams, type TaskMethodContract, type TaskWorkspaceEvent } from './taskMethods'
+import { ReviewParams, type ReviewMethodContract } from './reviewMethods'
 import { SearchParams, type SearchMethodContract } from './search'
 import type { NoteShareResult, SharedNote, SharedNoteSummary } from './sharedNote'
 import { SharedNotePayload, ShareNoteRequest } from './sharedNoteSchema'
@@ -930,12 +931,15 @@ export const Params = {
 
   ...TaskParams,
 
-  ...SearchParams
+  ...SearchParams,
+
+  ...ReviewParams
 } as const
 
 /** Maps every method name to its params schema and its result type. */
 export type MethodContract = TaskMethodContract &
-  SearchMethodContract & {
+  SearchMethodContract &
+  ReviewMethodContract & {
     'status.get': { params: z.infer<typeof Params.statusGet>; result: RuntimeStatus }
     /** The reply is sent before teardown, so `quitting` is a promise; the endpoint going is the receipt. */
     'app.quit': { params: z.infer<typeof Params.appQuit>; result: { quitting: true; pid: number; kept?: number } }

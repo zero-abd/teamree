@@ -69,9 +69,14 @@ export type PatchMore = {
   onOpenFile?: ((path: string) => void) | undefined
 }
 
+/** Lines picked for a comment, and how to put the composer away. */
+export type CommentTarget = { path: string; lines: PatchLine[]; onClose: () => void }
+
 export type PatchViewProps = {
   /** The worktree a `+` on a line writes a comment for its agent in; absent offers none. */
   commentsIn?: string
+  /** A composer of the caller's in place of the agent one, for a patch that is not this machine's. */
+  composeWith?: (target: CommentTarget) => React.ReactNode
   viewing?: PatchViewing
   more?: PatchMore
 }
@@ -87,6 +92,7 @@ export function PatchView({
   onHunk,
   onDiscard,
   commentsIn,
+  composeWith,
   viewing,
   more
 }: PatchViewProps & {
@@ -123,7 +129,8 @@ export function PatchView({
       ),
     []
   )
-  useCommentKeys(root, commentsIn !== undefined, setDraft)
+  const commenting = commentsIn !== undefined || composeWith !== undefined
+  useCommentKeys(root, commenting, setDraft)
 
   return (
     <div className={`patch patch--${layout}${viewing ? ' patch--review' : ''}${wrap ? ' patch--wrap' : ''}`} ref={root}>
@@ -176,21 +183,28 @@ export function PatchView({
                 startLines={opening[index]?.[at] ?? 0}
                 revealLine={reveal?.file === index && reveal.hunk === at ? reveal.line : null}
                 busy={busy}
-                {...(commentsIn === undefined
+                {...(!commenting
                   ? {}
                   : {
                       onPick: pick,
                       ...(draft?.place === `${index}:${at}`
                         ? {
                             draft,
-                            composer: (
-                              <CommentComposer
-                                worktreeId={commentsIn}
-                                path={file.path}
-                                lines={hunk.lines.slice(draft.from, draft.to + 1)}
-                                onClose={() => setDraft(null)}
-                              />
-                            )
+                            composer:
+                              composeWith === undefined ? (
+                                <CommentComposer
+                                  worktreeId={commentsIn ?? ''}
+                                  path={file.path}
+                                  lines={hunk.lines.slice(draft.from, draft.to + 1)}
+                                  onClose={() => setDraft(null)}
+                                />
+                              ) : (
+                                composeWith({
+                                  path: file.path,
+                                  lines: hunk.lines.slice(draft.from, draft.to + 1),
+                                  onClose: () => setDraft(null)
+                                })
+                              )
                           }
                         : {})
                     })}

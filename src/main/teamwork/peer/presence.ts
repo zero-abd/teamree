@@ -98,6 +98,7 @@ function withTaskDetails(
   if (details !== undefined) {
     extended.paths = pathsWithin(details.paths.slice(0, MAX_PEER_PATHS))
     extended.ahead = details.ahead
+    if (!details.clean) extended.dirty = true
   }
   const stage = stageOf(worktree, terminals, details)
   if (stage !== undefined) extended.stage = stage

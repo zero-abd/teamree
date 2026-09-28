@@ -197,6 +197,7 @@ export type PeerLinkOptions = {
    */
   onRemoteWrite?: (write: RemoteWriteRequest) => RemoteWriteVerdict
   onRemoteRead?: (terminalId: string) => RemoteReadVerdict
+  onRemoteTaskRead?: (worktreeId: string) => RemoteReadVerdict
   onError?: (error: unknown) => void
 }
 
@@ -771,6 +772,7 @@ export function createPeerLink(options: PeerLinkOptions): PeerLink {
       onWatchChange: options.onWatchersChange,
       ...(options.onRemoteWrite ? { onRemoteWrite: options.onRemoteWrite } : {}),
       ...(options.onRemoteRead ? { onRemoteRead: options.onRemoteRead } : {}),
+      ...(options.onRemoteTaskRead ? { onRemoteTaskRead: options.onRemoteTaskRead } : {}),
       scheduler: options.scheduler,
       onFatal: (failure) => {
         // A Noise stream with a hole in it is over. Recorded before the close, because the close

@@ -24,7 +24,13 @@ export const PEER_SERVICE_METHODS = [
   'teamwork.viewNote',
   'teamwork.closeNote',
   'teamwork.dismissNote',
-  'peer.shareNote'
+  'peer.shareNote',
+  'teamwork.teammateDiff',
+  'teamwork.sendReview',
+  'teamwork.reviews',
+  'teamwork.settleReview',
+  'peer.taskPatch',
+  'peer.review'
 ] as const
 
 export function registerPeerHandlers(registry: MethodRegistry, service: PeerService): PeerService {
@@ -69,6 +75,17 @@ export function registerPeerHandlers(registry: MethodRegistry, service: PeerServ
   registry.register('teamwork.dismissNote', Params.teamworkDismissNote, (params) => service.dismissNote(params))
   registry.register('peer.shareNote', Params.peerShareNote, (params, call) =>
     service.receiveNote(call.connectionId, params)
+  )
+
+  registry.register('teamwork.teammateDiff', Params.teamworkTeammateDiff, (params) => service.teammateDiff(params))
+  registry.register('teamwork.sendReview', Params.teamworkSendReview, (params) => service.sendReview(params))
+  registry.register('teamwork.reviews', Params.teamworkReviews, (params) => service.reviews(params))
+  registry.register('teamwork.settleReview', Params.teamworkSettleReview, (params) => service.settleReview(params))
+  registry.register('peer.taskPatch', Params.peerTaskPatch, (params, call) =>
+    service.taskPatch(call.connectionId, params)
+  )
+  registry.register('peer.review', Params.peerReview, (params, call) =>
+    service.receiveReview(call.connectionId, params)
   )
 
   return service

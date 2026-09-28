@@ -246,8 +246,10 @@ describe('what a teammate can reach', () => {
     // never a side effect of registering a handler. Resize and close stay off it.
     expect(Object.keys(PEER_METHODS).sort()).toEqual([
       'peer.presence',
+      'peer.review',
       'peer.shareNote',
       'peer.subscribe',
+      'peer.taskPatch',
       'terminal.read',
       'terminal.subscribe',
       'terminal.write',
@@ -283,12 +285,27 @@ describe('what a teammate can reach', () => {
       'peer.subscribe': 'link',
       // A note, filed only for a sender on that project's roster; nothing in it runs.
       'peer.shareNote': 'link',
+      // Comments, filed only on a task of a project the sender shares; nothing in them runs.
+      'peer.review': 'link',
       unsubscribe: 'link',
+      // Name a task, and may only have its diff if the asker shares its project and the owner shares details.
+      'peer.taskPatch': 'read-task',
       // Name a pane, and may only have it if the asker shares its project.
       'terminal.read': 'read-pane',
       'terminal.subscribe': 'read-pane',
       // The one that runs code, judged separately from the ones that only look.
       'terminal.write': 'write-pane'
+    })
+  })
+
+  it('gives a task only to a transport wired to judge it, and a build without the method says so', async () => {
+    const { caller } = rig(['peer.taskPatch'])
+    await expect(caller.call('peer.taskPatch', { worktreeId: 'w1' })).rejects.toThrow(
+      'this runtime is not sharing tasks'
+    )
+    const older = rig(['peer.presence'])
+    await expect(older.caller.call('peer.taskPatch', { worktreeId: 'w1' })).rejects.toMatchObject({
+      code: ErrorCode.UnknownMethod
     })
   })
 

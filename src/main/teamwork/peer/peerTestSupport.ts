@@ -6,12 +6,15 @@ import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { Project, TeammatePresenceRead, TeamworkRead, Terminal, Worktree } from '../../../shared/entities'
+import { Params, type MethodName } from '../../../shared/methods'
+import { ErrorCode } from '../../../shared/protocol'
 import type { GitRunner } from '../../git/gitProcess'
 import type { TeammateCache } from '../../store/teammateCache'
 import { formatMemberFile, MEMBER_FILE_SUFFIX, MEMBERS_DIR_SEGMENTS } from '../memberFile'
 import { createDispatcher, type Dispatcher } from '../../runtime/dispatcher'
 import { MethodRegistry } from '../../runtime/methodRegistry'
 import { createRuntimeContext } from '../../runtime/runtimeContext'
+import { RuntimeError } from '../../runtime/runtimeError'
 import { SubscriptionHub } from '../../runtime/subscriptionHub'
 import { createTerminalService, registerTerminalHandlers, type TerminalService } from '../../terminals/method-handlers'
 import { registerUnsubscribeHandler } from '../../runtime/handlers/unsubscribeHandler'
@@ -324,6 +327,12 @@ export type PeerRuntimeOptions = {
   shareTaskDetails?: () => boolean
   /** Stands in for git's changed paths and commits ahead. */
   readTaskGit?: PeerServiceOptions['readTaskGit']
+  /** Stands in for a task's diff against its base. */
+  readTaskPatch?: PeerServiceOptions['readTaskPatch']
+  /** Hears each review a teammate sends, as the app's notifications do. */
+  onReview?: PeerServiceOptions['onReview']
+  /** Methods this runtime answers as a build that predates them does. */
+  olderThan?: readonly MethodName[]
   /** Standing permissions this machine already holds at start, as a real runtime reads them from the workspace. */
   consent?: ConsentStore
   /** Panes this machine already has silenced when it starts; the mutes' half of `consent`. */
@@ -432,6 +441,7 @@ export async function createPeerRuntime(options: PeerRuntimeOptions): Promise<Pe
     ...(options.cache ? { cache: options.cache } : {}),
     ...(options.shareTaskDetails ? { shareTaskDetails: options.shareTaskDetails } : {}),
     ...(options.readTaskGit ? { readTaskGit: options.readTaskGit } : {}),
+    ...(options.readTaskPatch ? { readTaskPatch: options.readTaskPatch } : {}),
     ...(options.consent ? { consent: options.consent } : {}),
     ...(options.mutes ? { mutes: options.mutes } : {}),
     ...(options.watchWake ? { watchWake: options.watchWake } : {}),
@@ -440,10 +450,16 @@ export async function createPeerRuntime(options: PeerRuntimeOptions): Promise<Pe
       options.onChange?.()
     },
     ...(options.onNote ? { onNote: options.onNote } : {}),
+    ...(options.onReview ? { onReview: options.onReview } : {}),
     onError: (error) => errors.push(error)
   })
 
   registerPeerHandlers(registry, service)
+  for (const method of options.olderThan ?? []) {
+    registry.register(method, Params.peerPresence as never, () => {
+      throw new RuntimeError(ErrorCode.UnknownMethod, `${method} is not a method a teammate can call`)
+    })
+  }
   const dispatch = createDispatcher(registry)
   service.attach(dispatch)
 

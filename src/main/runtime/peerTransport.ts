@@ -28,9 +28,9 @@ import type { SubscriptionHub } from './subscriptionHub'
  * What has to be true about the caller before one admitted method runs. The list
  * is the table of scopes, so a method cannot be admitted without naming one:
  * `link` needs nothing, `read-pane` asks the owner whether this teammate may look,
- * `write-pane` runs code and is judged separately from looking.
+ * `read-task` the same of one of the owner's tasks, `write-pane` runs code and is judged separately from looking.
  */
-export type PeerScope = 'link' | 'read-pane' | 'write-pane'
+export type PeerScope = 'link' | 'read-pane' | 'read-task' | 'write-pane'
 
 /**
  * What a teammate may ask this runtime to do. `terminal.resize` and `terminal.close`
@@ -42,6 +42,8 @@ export const PEER_METHODS: Readonly<Partial<Record<MethodName, PeerScope>>> = {
   'peer.subscribe': 'link',
   // The roster check is the service's, against the key this link authenticated.
   'peer.shareNote': 'link',
+  'peer.review': 'link',
+  'peer.taskPatch': 'read-task',
   unsubscribe: 'link',
   'terminal.read': 'read-pane',
   'terminal.subscribe': 'read-pane',
@@ -162,6 +164,8 @@ export type PeerTransportOptions = {
    * no reads at all: one that forgot to ask would stream every pane on the machine.
    */
   onRemoteRead?: (terminalId: string) => RemoteReadVerdict
+  /** Whether this teammate may have one of this machine's tasks as a patch. Left out, none is given. */
+  onRemoteTaskRead?: (worktreeId: string) => RemoteReadVerdict
   /** Timers and the clock, so the pacing is driven rather than slept through. */
   scheduler?: TransportScheduler
   /**
@@ -619,6 +623,21 @@ export function createPeerTransport(options: PeerTransportOptions): PeerTranspor
       const verdict = judgeRead(terminalId)
       if (!verdict.ok) {
         releaseReservation()
+        write({ id: idOf(value), ok: false, error: { code: verdict.code, message: verdict.message } })
+        return
+      }
+    }
+    if (scope === 'read-task') {
+      const worktreeId = paramOf(value, 'worktreeId')
+      const verdict =
+        worktreeId === undefined
+          ? { ok: false as const, code: ErrorCode.InvalidParams, message: 'no task was named' }
+          : (options.onRemoteTaskRead?.(worktreeId) ?? {
+              ok: false as const,
+              code: ErrorCode.NotFound,
+              message: 'this runtime is not sharing tasks'
+            })
+      if (!verdict.ok) {
         write({ id: idOf(value), ok: false, error: { code: verdict.code, message: verdict.message } })
         return
       }

@@ -455,6 +455,11 @@ if (!app.requestSingleInstanceLock(launchData(process.env))) {
         trashItem: (path) => shell.trashItem(path),
         onAgentNotice: (notice) => notices?.deliver(notice),
         onSharedNote: (note) => notices?.announce({ title: `${note.handle} shared a note`, body: note.title }),
+        onReview: (review) =>
+          notices?.announce({
+            title: `${review.handle} reviewed ${review.task}`,
+            body: `${review.comments} ${review.comments === 1 ? 'comment' : 'comments'}`
+          }),
         // `teamree quit`: only `app.quit` runs `before-quit`. See quitSequence.ts.
         requestQuit: (force) => (force ? quitWithoutAsking() : app.quit()),
         unsavedFiles: () => unsaved?.paths() ?? [],

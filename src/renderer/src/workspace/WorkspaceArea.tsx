@@ -1,5 +1,5 @@
 // The right-hand side: the open worktree's panes under the strip, and beside them any teammates'
-// panes. Those sit outside the worktree's tree because every navigation here replaces what is under
+// panes and tasks under review. Those sit outside the worktree's tree because every navigation here replaces what is under
 // it, and unmounting a watched pane closes and reopens its subscription.
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
@@ -14,6 +14,8 @@ import { PaneTree } from '../panes/PaneTree'
 import { SplitFrame } from '../panes/SplitFrame'
 import { SettingsView } from '../settings/SettingsView'
 import { TeamworkView } from '../teamwork/TeamworkView'
+import { TeammateReviewView } from '../review/TeammateReviewView'
+import { useTeammateReview } from '../review/teammateReviewStore'
 import { measureCell, minPaneBox } from '../terminal/paneMetrics'
 import { WatchedPaneView } from '../terminal/WatchedPaneView'
 import { CheckoutMissing } from './CheckoutMissing'
@@ -41,6 +43,8 @@ export function WorkspaceArea({
   const focusPane = useWorkspaceStore((state) => state.focusPane)
   const closeWatchedPane = useWorkspaceStore((state) => state.closeWatchedPane)
   const noteWatchedPaneOutput = useWorkspaceStore((state) => state.noteWatchedPaneOutput)
+  const reviews = useTeammateReview((state) => state.open)
+  const closeReview = useTeammateReview((state) => state.closeReview)
 
   // Here because this component is always mounted: the focused pane must be marked read as the panes leave.
   useMarkPanesSeen()
@@ -63,6 +67,10 @@ export function WorkspaceArea({
           onClose={() => closeWatchedPane(watch.id)}
         />
       )
+    })),
+    ...reviews.map((review) => ({
+      key: `review:${review.worktreeId}`,
+      node: <TeammateReviewView {...review} onClose={() => closeReview(review.worktreeId)} />
     }))
   ]
 

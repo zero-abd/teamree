@@ -353,3 +353,34 @@ describe('under its teammate’s group', () => {
     expect(onWatch).not.toHaveBeenCalled()
   })
 })
+
+describe('reviewing their task', () => {
+  const review = vi.fn()
+  const mountReviewable = (worktree: TeammateWorktree): void => {
+    const [row] = teammateRows([worktree], NOW, {})
+    render(
+      <ul>
+        <TeammateWorktreeRow row={row!} watchingPaneIds={[]} onWatch={onWatch} onAnswer={onAnswer} onReview={review} />
+      </ul>
+    )
+  }
+
+  beforeEach(() => review.mockReset())
+
+  it('offers Review on a finished task and opens nothing else with it', () => {
+    mountReviewable(theirs({ stage: 'done' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Review' }))
+    expect(review).toHaveBeenCalledTimes(1)
+    expect(onWatch).not.toHaveBeenCalled()
+  })
+
+  it('keeps the button off a task still working, and puts Review and Watch on the right-click menu', () => {
+    mountReviewable(theirs({ stage: 'working' }))
+    expect(screen.queryByRole('button', { name: 'Review' })).toBeNull()
+    fireEvent.contextMenu(document.querySelector('.worktree__row') as HTMLElement)
+    const items = screen.getAllByRole('menuitem').map((item) => item.textContent)
+    expect(items).toEqual(['Review', 'Watch'])
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Review' }))
+    expect(review).toHaveBeenCalledTimes(1)
+  })
+})

@@ -89,6 +89,8 @@ describe('teammates see the task', () => {
     expect(child?.parentId).toBe(parent?.id)
     expect(child?.paths).toEqual(['src/limiter.ts'])
     expect(child?.ahead).toBe(1)
+    expect(child?.dirty).toBe(true)
+    expect(parent).not.toHaveProperty('dirty')
     expect(child?.stage).toBe('working')
   })
 
@@ -155,13 +157,20 @@ describe('a snapshot from another build', () => {
   })
 
   it('drops a malformed field alone, never the snapshot', () => {
-    const worktree = { ...v1.projects[0]!.worktrees[0]!, stage: 'celebrating', ahead: -1, task: 'Add rate limits' }
+    const worktree = {
+      ...v1.projects[0]!.worktrees[0]!,
+      stage: 'celebrating',
+      ahead: -1,
+      dirty: 'yes',
+      task: 'Add rate limits'
+    }
     const [kept] =
       parsePeerPresence({ ...v1, projects: [{ projectKey: 'k', worktrees: [worktree] }] }, 'k')?.projects[0]
         ?.worktrees ?? []
     expect(kept?.task).toBe('Add rate limits')
     expect(kept?.stage).toBeUndefined()
     expect(kept?.ahead).toBeUndefined()
+    expect(kept?.dirty).toBeUndefined()
   })
 
   it('reads a pane’s asking, menu and mute, and drops a malformed menu alone', () => {
