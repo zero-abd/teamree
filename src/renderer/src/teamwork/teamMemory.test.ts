@@ -53,6 +53,38 @@ describe('what the window remembers about teammates between reads', () => {
     expect(memory.landedAt.get('peer:bo:wt_1')).toBe(NOW - 2_000)
   })
 
+  it('stamps a task that appears beside a picture it already had, and the read that says it finished', () => {
+    const memory = newTeamMemory()
+    const next = { ...worktree('working'), id: 'peer:bo:wt_2' }
+    observeTeammates(memory, read([worktree('working')], true), read([worktree('working'), next], true), NOW)
+    expect(memory.startedAt.get('peer:bo:wt_2')).toBe(NOW)
+    expect(memory.startedAt.has('peer:bo:wt_1')).toBe(false)
+    observeTeammates(
+      memory,
+      read([worktree('working')], true),
+      read([worktree('failed', NOW + 5_000)], true),
+      NOW + 5_000
+    )
+    expect(memory.finishedAt.get('peer:bo:wt_1')).toEqual({ at: NOW + 5_000, failed: true })
+  })
+
+  it('does not call the tasks in a teammate’s first picture started', () => {
+    const memory = newTeamMemory()
+    observeTeammates(memory, {}, read([worktree('working')], true), NOW)
+    const unheard: Record<string, TeammatePresence> = {
+      p1: {
+        state: 'read',
+        projectId: 'p1',
+        worktrees: [],
+        teammates: [{ handle: 'bo', publicKey: 'BO', connected: false, heardAt: null }],
+        readAt: NOW
+      }
+    }
+    observeTeammates(memory, unheard, read([worktree('done')], true), NOW)
+    expect(memory.startedAt.size).toBe(0)
+    expect(memory.finishedAt.size).toBe(0)
+  })
+
   it('does not invent a time for a merge that happened before it was watching', () => {
     const memory = newTeamMemory()
     observeTeammates(memory, {}, read([worktree('landed')], true), NOW)

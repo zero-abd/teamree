@@ -19,6 +19,9 @@ import {
   waitingOnYou,
   type TeamMemory
 } from './homeRows'
+import { newTeamMemory } from './teamMemory'
+import { teamGlance } from '../sidebar/teamGlance'
+import { teammateRows } from '../sidebar/teammateRows'
 
 const NOW = Date.UTC(2026, 8, 27, 15, 0, 0)
 const ANA = 'YW5hYW5hYW5hYW5hYW5hYW5hYW5hYW5hYW5hYW5hYW4='
@@ -89,7 +92,7 @@ const status = (links: PeerLink[]): TeamworkRead => ({
   readAt: NOW
 })
 
-const empty = (): TeamMemory => ({ lastOnline: new Map(), landedAt: new Map(), taken: new Map() })
+const empty = (): TeamMemory => newTeamMemory()
 
 describe('who is on the team', () => {
   it('puts you first, then who is online, then who is away, then who was never seen', () => {
@@ -169,6 +172,43 @@ describe('who is on the team', () => {
       now: NOW
     })
     expect(bo?.worktrees.map((worktree) => worktree.name)).toEqual(['Asking one', 'Working one', 'Landed one'])
+  })
+
+  it('names each of their worktrees with the sidebar’s word at the same moment', () => {
+    const quiet = {
+      id: 'peer:bo:t_2',
+      title: 'claude',
+      shell: '/bin/zsh',
+      agent: 'claude' as const,
+      running: true,
+      busy: false,
+      quietForMs: 60_000
+    }
+    const worktrees = [
+      theirs({ id: 'peer:bo:wt_1', name: 'checkout', stage: 'working' }),
+      theirs({ id: 'peer:bo:wt_2', name: 'payment', stage: undefined, panes: [quiet] }),
+      theirs({ id: 'peer:bo:wt_3', name: 'cart', stage: 'ready', panes: [quiet] }),
+      theirs({ id: 'peer:bo:wt_4', name: 'footer', stage: 'landed', panes: [] }),
+      theirs({ id: 'peer:bo:wt_5', name: 'search', stage: 'done', panes: [quiet] })
+    ]
+    const heard = presence(worktrees)
+    const [, bo] = teamMembers({
+      list: roster(),
+      presence: heard,
+      status: undefined,
+      own: [],
+      memory: empty(),
+      now: NOW
+    })
+    const rows = teammateRows(worktrees, NOW)
+    const glance = teamGlance(undefined, heard, rows, NOW).find((teammate) => teammate.handle === 'bo')
+    const home = new Map(bo?.worktrees.map((worktree) => [worktree.id, worktree.word]))
+    const card = new Map(glance?.worktrees.map((worktree) => [worktree.id, worktree.word]))
+    for (const row of rows) {
+      expect(home.get(row.id), row.name).toBe(row.word)
+      expect(card.get(row.id), row.name).toBe(row.word)
+    }
+    expect(rows.map((row) => row.word)).toEqual(['working', 'ready', 'ready', 'merged', 'done'])
   })
 
   it('names their worktrees as they do, with the branch where two share a name', () => {
@@ -402,6 +442,33 @@ describe('the team’s recent activity', () => {
     expect(
       teamActivity({ list: undefined, handoffs: undefined, notes: [], presence: undefined, memory, projectId: 'p2' })
     ).toEqual([])
+  })
+
+  it('says when a teammate started, finished and merged a task, newest first', () => {
+    const memory = empty()
+    memory.startedAt.set('peer:bo:wt_1', NOW - 60_000)
+    memory.finishedAt.set('peer:bo:wt_1', { at: NOW - 40_000, failed: false })
+    memory.landedAt.set('peer:bo:wt_1', NOW - 20_000)
+    memory.startedAt.set('peer:bo:wt_2', NOW - 50_000)
+    memory.finishedAt.set('peer:bo:wt_2', { at: NOW - 30_000, failed: true })
+    const items = teamActivity({
+      list: undefined,
+      handoffs: undefined,
+      notes: [],
+      presence: presence([
+        theirs({ name: 'fix footer copy', stage: 'landed' }),
+        theirs({ id: 'peer:bo:wt_2', name: 'search', stage: 'failed' })
+      ]),
+      memory,
+      projectId: 'p1'
+    })
+    expect(items.map((item) => item.text)).toEqual([
+      'bo merged fix footer copy',
+      'bo failed search',
+      'bo finished fix footer copy',
+      'bo started search',
+      'bo started fix footer copy'
+    ])
   })
 
   it('says nothing about a merge it did not see happen', () => {

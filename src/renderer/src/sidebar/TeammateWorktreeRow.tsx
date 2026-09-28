@@ -63,7 +63,7 @@ export function TeammateWorktreeRow({
             {tone ? <span className={dotClass(tone)} title={TONE_LABEL[tone]} aria-label={TONE_LABEL[tone]} /> : null}
           </span>
           <span className="worktree__meta">
-            {row.stage === undefined ? null : <span className="worktree__stage">{row.stage}</span>}
+            {row.stage === undefined ? null : <span className="worktree__stage">{row.word}</span>}
             {row.report === undefined ? null : <span className="worktree__report">{row.report}</span>}
             {row.branch === undefined ? null : <span className="worktree__branch">{row.branch}</span>}
             {overlap === undefined ? null : (

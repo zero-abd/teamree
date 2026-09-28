@@ -4,7 +4,17 @@
 
 import { teammatesHeard, type PeerPane, type TeammatePresence, type TeammateWorktree } from '@shared/entities'
 import type { PeerHandoff, TaskStage } from '@shared/tasks'
-import { activityOf, askingLine, paneNames, paneText, worktreeTone, type AgentRow, type DotTone } from './agentRows'
+import { STAGE_WORD } from '../dashboard/taskRows'
+import {
+  activityOf,
+  askingLine,
+  paneNames,
+  paneText,
+  TONE_LABEL,
+  worktreeTone,
+  type AgentRow,
+  type DotTone
+} from './agentRows'
 import { teammateStaleness, type TeammateStaleness } from './teammateStaleness'
 import { worktreeDisplay } from './worktreeDisplay'
 
@@ -40,6 +50,8 @@ export type TeammateWorktreeRowModel = {
   panes: TeammatePaneRow[]
   /** The collapsed row's dot. */
   tone: DotTone | null
+  /** What it is doing in one word, the same wherever it is named; see `teammateWord`. */
+  word: string | null
   /** How old the whole picture is, in this machine's milliseconds. */
   heardAgoMs: number
   /**
@@ -68,6 +80,7 @@ export function teammateRows(
     const panes = worktree.panes.map((pane, index) =>
       paneRow(pane, names[index] ?? pane.title, worktree, heardAgoMs, evidence[pane.id] ?? null)
     )
+    const tone = worktreeTone(panes)
     return {
       id: worktree.id,
       handle: worktree.handle,
@@ -83,12 +96,19 @@ export function teammateRows(
       ...(branch === undefined ? {} : { branch }),
       state: worktree.state,
       panes,
-      tone: worktreeTone(panes),
+      tone,
+      word: teammateWord(worktree.stage, tone),
       heardAgoMs,
       live: worktree.live,
       staleness: teammateStaleness({ live: worktree.live, heardAt: worktree.heardAt, handle: worktree.handle, now })
     }
   })
+}
+
+/** The owner's stage when they sent one (`landed` reads merged), else the panes' dot; null with nothing running. */
+export function teammateWord(stage: TaskStage | undefined, tone: DotTone | null): string | null {
+  if (stage !== undefined) return STAGE_WORD[stage]
+  return tone === null ? null : TONE_LABEL[tone]
 }
 
 /** The names that occur more than once. */

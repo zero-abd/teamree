@@ -4,7 +4,7 @@
 import { useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Avatar } from '../teamwork/Avatar'
-import { dotClass, TONE_LABEL } from './agentRows'
+import { dotClass } from './agentRows'
 import { activityWords, presenceWords, type TeamCues, type TeammateGlance } from './teamGlance'
 import { Icon } from '../icons/Icon'
 
@@ -90,10 +90,10 @@ function TeammateCard({ teammate, rect }: { teammate: TeammateGlance; rect: DOMR
           {teammate.worktrees.map((worktree) => (
             <li key={worktree.id}>
               <span className="team-card__worktree">{worktree.name}</span>
-              {worktree.tone === null ? null : (
+              {worktree.word === null ? null : (
                 <span className="team-card__tone">
                   <span className={dotClass(worktree.tone)} />
-                  {TONE_LABEL[worktree.tone]}
+                  {worktree.word}
                 </span>
               )}
             </li>

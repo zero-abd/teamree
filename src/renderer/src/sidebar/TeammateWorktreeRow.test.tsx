@@ -288,6 +288,11 @@ describe('what the teammate is doing', () => {
     expect(document.querySelector('.worktree__report')?.textContent).toBe('Budget holds under load.')
   })
 
+  it('says merged, as their own row does, for work that landed', () => {
+    mount(theirs({ stage: 'landed' }))
+    expect(document.querySelector('.worktree__stage')?.textContent).toBe('merged')
+  })
+
   it('sits one level deeper for a child', () => {
     const rows = teammateRows(
       [

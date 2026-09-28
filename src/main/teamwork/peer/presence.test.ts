@@ -218,6 +218,17 @@ describe('presenceFor with task details', () => {
     expect(stage([])).toBeUndefined()
   })
 
+  it('names a stage in the owner’s own order: a merge outranks the report, a working pane outranks both', () => {
+    const report = { outcome: 'succeeded' as const, summary: 'Fixed.', paths: [], at: 5 }
+    const stage = (terminals: Terminal[], details?: TaskGitDetails) =>
+      describeOne({ source: source({ report }, details, terminals), taskDetails: true })?.stage
+    expect(stage([], { paths: [], ahead: 0, clean: true })).toBe('done')
+    expect(stage([], { paths: [], ahead: 0, clean: true, merged: true })).toBe('landed')
+    expect(stage([{ ...terminal('t1'), agent: 'claude', busy: true }], { paths: [], ahead: 1, clean: true })).toBe(
+      'working'
+    )
+  })
+
   it('sends each pane as its owner reads it', () => {
     const agent = (id: string, overrides: Partial<Terminal>): Terminal => ({
       ...terminal(id),

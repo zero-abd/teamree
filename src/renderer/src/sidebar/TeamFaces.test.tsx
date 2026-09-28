@@ -26,7 +26,11 @@ describe('TeamFaces', () => {
       <TeamFaces
         glance={[
           teammate('ana', { presence: 'away', heardAgoMs: 36_000 }),
-          teammate('bo', { asking: 1, working: 1, worktrees: [{ id: 'w', name: 'cart', tone: 'working' }] })
+          teammate('bo', {
+            asking: 1,
+            working: 1,
+            worktrees: [{ id: 'w', name: 'cart', tone: 'working', word: 'working' }]
+          })
         ]}
         onReveal={() => {}}
         onMore={() => {}}
@@ -44,8 +48,8 @@ describe('TeamFaces', () => {
           teammate('bo', {
             asking: 1,
             worktrees: [
-              { id: 'w1', name: 'Round cart totals', tone: 'working' },
-              { id: 'w2', name: 'Stop double charges', tone: 'waiting' }
+              { id: 'w1', name: 'Round cart totals', tone: 'working', word: 'working' },
+              { id: 'w2', name: 'Stop double charges', tone: 'waiting', word: 'asking' }
             ]
           })
         ]}
