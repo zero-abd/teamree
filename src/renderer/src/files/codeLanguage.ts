@@ -13,5 +13,7 @@ export function languageFor(path: string): LanguageDescription | null {
 export async function loadLanguage(path: string): Promise<LanguageSupport | null> {
   const description = languageFor(path)
   if (description === null) return null
-  return description.load().catch(() => null)
+  const load =
+    description.name === 'Markdown' ? import('./markdownSource').then((m) => m.markdownSource()) : description.load()
+  return load.catch(() => null)
 }

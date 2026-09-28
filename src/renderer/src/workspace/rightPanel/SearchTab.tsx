@@ -38,6 +38,8 @@ export function SearchTab({ worktree }: { worktree: Worktree }): React.JSX.Eleme
   const failed = useSearchStore((state) => state.failed)
   const setForm = useSearchStore((state) => state.setForm)
   const run = useSearchStore((state) => state.run)
+  const selected = useSearchStore((state) => state.selected)
+  const setSelected = useSearchStore((state) => state.select)
 
   const worktrees = useWorkspaceStore((state) => state.worktrees)
   const focusToken = useWorkspaceStore((state) => state.searchFocus)
@@ -45,7 +47,6 @@ export function SearchTab({ worktree }: { worktree: Worktree }): React.JSX.Eleme
   const openFileAt = useWorkspaceStore((state) => state.openFileAt)
 
   const field = useRef<HTMLInputElement>(null)
-  const [selected, setSelected] = useState<string | null>(null)
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set())
 
   const form: SearchForm = { query, caseSensitive, wholeWord, regex, scope, include }
@@ -100,7 +101,7 @@ export function SearchTab({ worktree }: { worktree: Worktree }): React.JSX.Eleme
   const onKeyDown = (event: React.KeyboardEvent): void => {
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault()
-      setSelected((current) => stepHit(rows, current, event.key === 'ArrowDown' ? 1 : -1))
+      setSelected(stepHit(rows, selected, event.key === 'ArrowDown' ? 1 : -1))
       return
     }
     if (event.key === 'Enter' && !event.nativeEvent.isComposing) {

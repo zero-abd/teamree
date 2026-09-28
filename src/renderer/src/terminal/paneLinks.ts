@@ -197,8 +197,10 @@ export type PaneLinkHost = {
 }
 
 export type PaneLinks = IDisposable & {
-  /** The link under the pointer, for the right-click menu; a path counts once it is known to exist. */
+  /** The link under the pointer, at once; a path counts only while its folder's listing is remembered. */
   at: (event: MouseEvent) => Pointed | null
+  /** The link under the pointer for the right-click menu, reading the folder a path names when it must. */
+  resolveAt: (event: MouseEvent) => Promise<Pointed | null>
 }
 
 type Found = { kind: 'url'; uri: string } | { kind: 'path'; printed: PrintedPath }
@@ -344,6 +346,12 @@ export function paneLinks(term: XTerm, host: PaneLinkHost): PaneLinks {
     at: (event) => {
       const found = foundAt(event)
       return found === null ? null : (pointedFor(found) ?? null)
+    },
+    resolveAt: async (event) => {
+      const found = foundAt(event)
+      if (found?.kind !== 'path') return found === null ? null : { kind: 'link', uri: found.uri }
+      const file = await resolve(found.printed)
+      return file === null ? null : { kind: 'path', ...file, ...position(found.printed) }
     },
     dispose: () => {
       element?.removeEventListener('mousedown', press, true)

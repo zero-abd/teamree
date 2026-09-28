@@ -4,7 +4,10 @@
 import { HighlightStyle, syntaxHighlighting } from '@codemirror/language'
 import type { Extension } from '@codemirror/state'
 import { EditorView } from '@codemirror/view'
-import { tags as t } from '@lezer/highlight'
+import { Tag, tags as t } from '@lezer/highlight'
+
+/** Markdown's front matter under Source; see `markdownSource.ts`. */
+export const frontMatterTag = Tag.define()
 
 const chrome = EditorView.theme(
   {
@@ -73,6 +76,7 @@ const highlight = HighlightStyle.define([
   { tag: [t.escape, t.self, t.special(t.variableName)], color: 'var(--term-cyan)' },
   { tag: [t.operator, t.punctuation, t.separator, t.bracket], color: 'var(--fg-secondary)' },
   { tag: t.heading, color: 'var(--term-bright-blue)', fontWeight: '600' },
+  { tag: frontMatterTag, color: 'var(--fg-muted)' },
   { tag: [t.link, t.url], color: 'var(--term-cyan)', textDecoration: 'underline' },
   { tag: t.emphasis, fontStyle: 'italic' },
   { tag: t.strong, fontWeight: '600' },

@@ -164,6 +164,29 @@ describe('the search tab', () => {
     expect(openWorktree).toHaveBeenCalledWith('w1')
   })
 
+  it('keeps the hit it opened in another task current once the results regroup around that task', async () => {
+    render(<RightPanel />)
+    fireEvent.click(screen.getByRole('button', { name: 'All Tasks' }))
+    const search = await type('limit')
+    act(() => search.emit(HITS))
+
+    fireEvent.click(await screen.findByTitle('src/limits.ts:4'))
+    await waitFor(() => expect(openFileAt).toHaveBeenCalled())
+    const results = screen.getByRole('list', { name: 'Results' })
+    expect(within(results).getAllByRole('listitem')[0]?.textContent).toBe('auth refresh1')
+    const current = results.querySelectorAll('[aria-current="true"]')
+    expect([...current].map((row) => (row as HTMLElement).title)).toEqual(['src/limits.ts:4'])
+  })
+
+  it('puts the caret in the field, its text selected, when the Search tab is clicked', async () => {
+    useWorkspaceStore.setState({ rightPanelTab: 'files' })
+    useSearchStore.setState({ query: 'limit' })
+    render(<RightPanel />)
+    fireEvent.click(screen.getByRole('tab', { name: 'Search' }))
+    await waitFor(() => expect(document.activeElement).toBe(field()))
+    expect([field().selectionStart, field().selectionEnd]).toEqual([0, 5])
+  })
+
   it('walks the hits with the arrows and opens the chosen one on Enter', async () => {
     render(<RightPanel />)
     const search = await type('limit')

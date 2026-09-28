@@ -112,6 +112,19 @@
   color: var(--fg);
 }
 
+/* A line a batched comment quotes, until the batch is sent or cleared; the `+` covers it on hover. */
+.patch__pending {
+  position: absolute;
+  top: calc(50% - 3.5px);
+  left: 6px;
+  color: var(--accent-bright);
+  pointer-events: none;
+}
+
+.patch__row--pending .patch__plus {
+  opacity: 0;
+}
+
 .comment {
   position: sticky;
   left: 0;

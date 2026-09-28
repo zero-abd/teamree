@@ -112,6 +112,36 @@ describe('a comment on diff lines', () => {
     expect(writes()).toEqual([])
   })
 
+  it('marks a batched comment’s lines until the batch is sent or cleared', () => {
+    mount({ claude: pane('claude', { agent: 'claude' }) })
+    fireEvent.click(screen.getByRole('button', { name: 'Comment on line 9' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Comment on line 10' }), { shiftKey: true })
+    fireEvent.change(screen.getByRole('textbox', { name: 'Comment' }), { target: { value: 'Test this.' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Add to Batch' }))
+    const marked = (): string[] =>
+      [...document.querySelectorAll('.patch__row--pending')].map(
+        (row) => row.querySelector('.patch__text')!.textContent!
+      )
+    expect(marked()).toEqual(['export function sub(a: number, b: number): number {', '  return a - b'])
+    expect(screen.getAllByRole('img', { name: 'Comment in batch' })).toHaveLength(2)
+    act(() => useReviewStore.getState().clearBatch('w1'))
+    expect(marked()).toEqual([])
+  })
+
+  it('marks a batched comment side by side too, and not in another worktree’s patch', () => {
+    useReviewStore.getState().addToBatch('w1', {
+      path: 'src/math.ts',
+      lines: [{ kind: 'added', text: '  return a - b', oldNumber: null, newNumber: 10 }],
+      note: 'x'
+    })
+    useWorkspaceStore.setState({ ...INITIAL, activeWorktreeId: 'w1', terminals: {} }, true)
+    const { unmount } = render(<PatchView patch={PATCH} truncated={false} layout="split" commentsIn="w1" />)
+    expect(document.querySelectorAll('.patch__row--pending')).toHaveLength(1)
+    unmount()
+    render(<PatchView patch={PATCH} truncated={false} layout="inline" commentsIn="w2" />)
+    expect(document.querySelectorAll('.patch__row--pending')).toHaveLength(0)
+  })
+
   it('opens on the selected lines with c', () => {
     mount({ claude: pane('claude', { agent: 'claude' }) })
     const texts = document.querySelectorAll('.patch__text')
