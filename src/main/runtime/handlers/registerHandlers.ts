@@ -58,6 +58,7 @@ import { registerStatusHandler } from './statusHandler'
 import { registerSettingsHandlers } from './taskPlaceholderHandlers'
 import { registerUnsubscribeHandler } from './unsubscribeHandler'
 import { registerWorkspaceSubscribeHandler } from './workspaceSubscribeHandler'
+import { registerWorkspaceFileHandlers } from './workspaceFileHandlers'
 import {
   projectWorktreeIds,
   publishGitEvents,
@@ -147,6 +148,7 @@ export function registerHandlers(registry: MethodRegistry, options: RegisterHand
   })
   registerUnsubscribeHandler(registry)
   registerWorkspaceSubscribeHandler(registry)
+  registerWorkspaceFileHandlers(registry)
   registerAppearanceHandlers(registry, options.onAppearance)
   registerAgentTrustHandlers(registry)
   registerSettingsHandlers(registry, options.worktreesRoot)

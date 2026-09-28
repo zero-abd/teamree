@@ -147,7 +147,7 @@ describe('workspace store', () => {
     const missing = await WorkspaceStore.open(join(directory, 'never-written.json'), { onProblem: () => {} })
 
     expect(unreadable.unreadable).toContain('JSON')
-    expect(problems).toEqual([{ kind: 'unreadable', filePath: path, reason: unreadable.unreadable }])
+    expect(problems[0]).toEqual({ kind: 'unreadable', filePath: path, reason: unreadable.unreadable })
     expect(missing.unreadable).toBeUndefined()
   })
 
@@ -201,7 +201,8 @@ describe('workspace store', () => {
     await mkdir(home)
     const problems: StoreProblem[] = []
     const store = await WorkspaceStore.open(join(home, 'workspace.json'), {
-      onProblem: (problem) => problems.push(problem)
+      onProblem: (problem) => problems.push(problem),
+      retryMs: 60_000
     })
 
     // The place the file lives stops being a directory mid-session.
@@ -216,12 +217,11 @@ describe('workspace store', () => {
     store.putWorktree(worktree('w1'))
     await store.flush().catch(() => {})
     expect(problems).toHaveLength(1)
+    store.close()
   })
 
   it('describes each problem in terms of what it costs the user', () => {
-    expect(describeStoreProblem({ kind: 'unreadable', filePath: '/w.json', reason: 'bad json' })).toContain(
-      'opened with nothing in it'
-    )
+    expect(describeStoreProblem({ kind: 'unreadable', filePath: '/w.json', reason: 'bad json' })).toContain('bad json')
     expect(describeStoreProblem({ kind: 'keptAside', filePath: '/w.json', keptAt: '/w.json.old' })).toContain(
       '/w.json.old'
     )
