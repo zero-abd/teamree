@@ -39,9 +39,11 @@ import { PeerTaskPatchSchema } from '../../../shared/reviewMethods'
 import {
   MAX_PEER_PATCH_BYTES,
   type PeerReview,
+  type PeerReviewRequest,
   type PeerTaskPatch,
   type ReceivedReview,
-  type TeammateDiff
+  type TeammateDiff,
+  type TeamworkReviewRequests
 } from '../../../shared/teammateReview'
 import { createGitRunner, type GitRunner } from '../../git/gitProcess'
 import { cutToBytes } from '../../git/worktreeChanges'
@@ -1033,10 +1035,15 @@ export class PeerService {
       this.#handoffs.sendTo([fact.projectId], this.#handleIn(fact, peer.publicKey))
     )
     const took = this.#handoffs.tookFrom(peer.publicKey)
+    const members = this.#memberProjects(peer.projectKey, peer.publicKey)
+    const reviewRequests = members.flatMap((fact) =>
+      this.#reviews.askedOf([fact.projectId], this.#handleIn(fact, peer.publicKey))
+    )
     return {
       ...presence,
       ...(handoffs.length === 0 ? {} : { handoffs }),
-      ...(took.length === 0 ? {} : { took })
+      ...(took.length === 0 ? {} : { took }),
+      ...(reviewRequests.length === 0 ? {} : { reviewRequests })
     }
   }
 
@@ -1148,12 +1155,14 @@ export class PeerService {
 
   /**
    * Whether a teammate may have one of this machine's tasks as a patch: the pane read's scoping, then
-   * the owner's Share Task Details. A task in another project answers as one that does not exist.
+   * the owner's Share Task Details or their asking this teammate to review it. A task in another
+   * project answers as one that does not exist.
    */
   remoteTaskRead(connectionId: string, worktreeId: string): RemoteReadVerdict {
     const found = this.#peerTask(connectionId, worktreeId)
     if ('code' in found) return { ok: false, ...found }
-    if (!this.#sharesTaskDetails()) {
+    const handle = this.#handleIn(found.project, this.#peerByConnection.get(connectionId)?.publicKey ?? '')
+    if (!this.#sharesTaskDetails() && !this.#reviews.wasAsked(found.worktree.id, handle)) {
       return { ok: false, code: ErrorCode.Conflict, message: 'the owner is not sharing task details' }
     }
     return { ok: true }
@@ -1253,9 +1262,75 @@ export class PeerService {
     } catch (error) {
       throw new TeamworkError(ErrorCode.Conflict, reasonFor(error))
     }
+    // Their review answers what this machine asked of them.
+    if (this.#reviews.reviewed(found.worktree.id, filed.handle)) this.#pushPresence()
     this.#options.onReview?.(filed)
     this.#options.onChange()
     return { received: true }
+  }
+
+  /** Asks one roster teammate to review one of this machine's tasks; the request rides presence to them. */
+  requestReview(params: ParamsOf<'teamwork.requestReview'>): PeerReviewRequest {
+    const worktree = this.#options.workspace.listWorktrees().find((entry) => entry.id === params.worktreeId)
+    if (!worktree) throw notFound(`no worktree with id ${params.worktreeId}`)
+    const to = this.handoffTarget(worktree.projectId, params.to)
+    const from = this.#ownHandleIn(this.#projects.get(worktree.projectId)?.projectKey)
+    const request: PeerReviewRequest = {
+      id: randomUUID(),
+      to,
+      ...(from === null ? {} : { from }),
+      worktreeId: worktree.id,
+      worktreeName: worktree.name,
+      branch: worktree.branch,
+      at: this.#scheduler.now()
+    }
+    this.#reviews.ask({ ...request, projectId: worktree.projectId })
+    this.#pushPresence()
+    this.#options.onChange()
+    return request
+  }
+
+  /** Reviews teammates asked of this machine in one project, and the ones it asked and is still waiting on. */
+  reviewRequests(params: ParamsOf<'teamwork.reviewRequests'>): TeamworkReviewRequests {
+    return {
+      incoming: this.#incomingReviewRequests(params.projectId).map((entry) => entry.request),
+      outgoing: this.#reviews.asked(params.projectId)
+    }
+  }
+
+  settleReviewRequest(params: ParamsOf<'teamwork.settleReviewRequest'>): { settled: boolean } {
+    const found = this.#incomingReviewRequests(params.projectId).find((entry) => entry.request.id === params.id)
+    if (!found) return { settled: false }
+    this.#reviews.answer(params.id, found.publicKey, params.how)
+    this.#options.onChange()
+    return { settled: true }
+  }
+
+  /** Requests heard from roster teammates, made of this machine's handle and not put off, oldest first. */
+  #incomingReviewRequests(projectId: string): { request: PeerReviewRequest; publicKey: string }[] {
+    const facts = this.#projects.get(projectId)
+    const projectKey = facts?.disabledReason === null ? facts.projectKey : undefined
+    const own = this.#ownHandleIn(projectKey)
+    if (!facts || projectKey === undefined || own === null) return []
+    const found: { request: PeerReviewRequest; publicKey: string }[] = []
+    for (const publicKey of facts.rosterKeys) {
+      if (publicKey === this.#identityKey) continue
+      for (const request of this.#heard.get(linkIdFor(publicKey, projectKey))?.presence.reviewRequests ?? []) {
+        const answer = this.#reviews.answerOf(request.id, publicKey)
+        if (request.to !== own || answer === 'later') continue
+        found.push({
+          request: {
+            ...request,
+            // As `presence` names the task, and by this roster, never by what the sender called itself.
+            worktreeId: `peer:${publicKey.slice(0, 12)}:${request.worktreeId}`,
+            from: this.#handleIn(facts, publicKey),
+            ...(answer === 'seen' ? { seen: true as const } : {})
+          },
+          publicKey
+        })
+      }
+    }
+    return found.sort((a, b) => a.request.at - b.request.at)
   }
 
   reviews(params: ParamsOf<'teamwork.reviews'>): ReceivedReview[] {
@@ -2430,13 +2505,14 @@ export function parsePeerPresence(value: unknown, onlyProjectKey: string | undef
   const parsed = PresencePayload.safeParse(value)
   if (!parsed.success) return undefined
   const project = parsed.data.projects.find((candidate) => candidate.projectKey === onlyProjectKey)
-  const { handoffs, took } = parsed.data
+  const { handoffs, took, reviewRequests } = parsed.data
   return {
     revision: parsed.data.revision,
     handle: parsed.data.handle ?? null,
     projects: project ? [boundProject(project)] : [],
     ...(handoffs === undefined ? {} : { handoffs }),
-    ...(took === undefined ? {} : { took })
+    ...(took === undefined ? {} : { took }),
+    ...(reviewRequests === undefined ? {} : { reviewRequests })
   }
 }
 

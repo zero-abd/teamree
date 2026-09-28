@@ -26,6 +26,8 @@ const { useWorkspaceStore } = await import('../state/workspaceStore')
 const { useReviewStore } = await import('./reviewStore')
 const { useReceivedReviews, reviewPopups } = await import('../teamwork/receivedReviewsStore')
 const { ReviewPopups } = await import('../teamwork/ReviewPopups')
+const { useReviewRequests } = await import('../teamwork/reviewRequestsStore')
+const { useTeammateReview } = await import('./teammateReviewStore')
 const { ReceivedReviews } = await import('./ReceivedReviews')
 const { pasted } = await import('./reviewComments')
 
@@ -65,6 +67,8 @@ beforeEach(() => {
   call.mockClear()
   useReviewStore.setState({ viewed: {}, batch: {}, queued: {}, scope: {}, jump: {} })
   useReceivedReviews.setState({ reviews: [review()] })
+  useReviewRequests.setState({ byProject: {} })
+  useTeammateReview.setState({ open: [], batch: {} })
   useWorkspaceStore.setState(
     {
       ...INITIAL,
@@ -120,5 +124,30 @@ describe('a teammate’s review of your task', () => {
   it('shows nothing on a task nobody reviewed', () => {
     render(<ReceivedReviews worktreeId="w2" />)
     expect(document.querySelector('.review__received')).toBeNull()
+  })
+})
+
+describe('a teammate asking you for a review', () => {
+  const request = {
+    id: 'q1',
+    to: 'me',
+    from: 'ben',
+    worktreeId: 'peer:benkey:wt_fix',
+    worktreeName: 'fix footer copy',
+    branch: 'fix-footer-copy',
+    at: 5
+  }
+
+  it('pops up once, and Review opens their task beside the workspace', async () => {
+    useReceivedReviews.setState({ reviews: [] })
+    useReviewRequests.setState({ byProject: { p1: { incoming: [request], outgoing: [] } } })
+    render(<ReviewPopups />)
+    expect(screen.getByText(/asks you to review/).textContent).toBe('ben asks you to review fix footer copy')
+    fireEvent.click(screen.getByRole('button', { name: 'Review' }))
+    expect(useTeammateReview.getState().open).toEqual([
+      { projectId: 'p1', worktreeId: 'peer:benkey:wt_fix', title: 'ben · fix footer copy' }
+    ])
+    expect(call).toHaveBeenCalledWith('teamwork.settleReviewRequest', { projectId: 'p1', id: 'q1', how: 'seen' })
+    await waitFor(() => expect(screen.queryByText(/asks you to review/)).toBeNull())
   })
 })

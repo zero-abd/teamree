@@ -29,6 +29,9 @@ export const PEER_SERVICE_METHODS = [
   'teamwork.sendReview',
   'teamwork.reviews',
   'teamwork.settleReview',
+  'teamwork.requestReview',
+  'teamwork.reviewRequests',
+  'teamwork.settleReviewRequest',
   'peer.taskPatch',
   'peer.review'
 ] as const
@@ -81,6 +84,13 @@ export function registerPeerHandlers(registry: MethodRegistry, service: PeerServ
   registry.register('teamwork.sendReview', Params.teamworkSendReview, (params) => service.sendReview(params))
   registry.register('teamwork.reviews', Params.teamworkReviews, (params) => service.reviews(params))
   registry.register('teamwork.settleReview', Params.teamworkSettleReview, (params) => service.settleReview(params))
+  registry.register('teamwork.requestReview', Params.teamworkRequestReview, (params) => service.requestReview(params))
+  registry.register('teamwork.reviewRequests', Params.teamworkReviewRequests, (params) =>
+    service.reviewRequests(params)
+  )
+  registry.register('teamwork.settleReviewRequest', Params.teamworkSettleReviewRequest, (params) =>
+    service.settleReviewRequest(params)
+  )
   registry.register('peer.taskPatch', Params.peerTaskPatch, (params, call) =>
     service.taskPatch(call.connectionId, params)
   )

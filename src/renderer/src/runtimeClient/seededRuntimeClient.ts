@@ -1394,6 +1394,9 @@ export function createSeededRuntimeClient(): RuntimeClient {
     'teamwork.sendReview': notInDemo('teamwork.sendReview'),
     'teamwork.reviews': () => [],
     'teamwork.settleReview': () => ({ settled: false }),
+    'teamwork.requestReview': notInDemo('teamwork.requestReview'),
+    'teamwork.reviewRequests': () => ({ incoming: [], outgoing: [] }),
+    'teamwork.settleReviewRequest': () => ({ settled: false }),
     'peer.taskPatch': () => {
       throw new Error('peer.taskPatch is a teammate’s call, not a window’s')
     },

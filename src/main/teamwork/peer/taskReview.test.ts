@@ -22,6 +22,7 @@ import {
   worktree,
   type PeerRuntimeOptions
 } from './peerTestSupport'
+import { parsePeerPresence } from './peerService'
 import { MAX_HELD_REVIEWS, MAX_UNSEEN_REVIEWS_PER_SENDER, ReviewInbox, type ArrivingReview } from './taskReview'
 
 const RELAY_URL = 'ws://relay.invalid/v1/relay'
@@ -333,3 +334,68 @@ async function readingSettled<T>(
   }
   return reading
 }
+
+describe('asking a teammate for a review', () => {
+  it('reaches them in presence as their own task id, and is done once they send one', async () => {
+    const { alice, bob, scheduler, taskId } = await pair()
+    const asked = bob.service.requestReview({ worktreeId: 'wt_fix', to: 'alice' })
+    await scheduler.advance(1_000)
+
+    expect(asked).toMatchObject({ to: 'alice', from: 'bob', worktreeId: 'wt_fix', worktreeName: 'fix footer' })
+    expect(bob.service.reviewRequests({ projectId: 'p_bob' }).outgoing).toMatchObject([{ id: asked.id }])
+    expect(alice.service.reviewRequests({ projectId: 'p_alice' })).toEqual({
+      incoming: [{ ...asked, worktreeId: taskId, from: 'bob' }],
+      outgoing: []
+    })
+
+    const sending = alice.service.sendReview({ projectId: 'p_alice', worktreeId: taskId, comments: [COMMENT] })
+    await scheduler.advance(1_000)
+    await sending
+    expect(bob.service.reviewRequests({ projectId: 'p_bob' }).outgoing).toEqual([])
+    expect(alice.service.reviewRequests({ projectId: 'p_alice' }).incoming).toEqual([])
+  })
+
+  it('is the owner’s consent to the diff even with task details unshared', async () => {
+    const { alice, bob, scheduler, taskId } = await pair({ bob: { shareTaskDetails: () => false } })
+    bob.service.requestReview({ worktreeId: 'wt_fix', to: 'alice' })
+    await scheduler.advance(1_000)
+    const reading = alice.service.teammateDiff({ projectId: 'p_alice', worktreeId: taskId })
+    await scheduler.advance(0)
+    expect(await reading).toMatchObject({ source: 'peer', patch: BOB_PATCH })
+  })
+
+  it('retires its popup when seen, leaves the list on Later, and remembers both', async () => {
+    const { alice, bob, scheduler } = await pair()
+    const asked = bob.service.requestReview({ worktreeId: 'wt_fix', to: 'alice' })
+    await scheduler.advance(1_000)
+
+    expect(alice.service.settleReviewRequest({ projectId: 'p_alice', id: asked.id, how: 'seen' })).toEqual({
+      settled: true
+    })
+    expect(alice.service.reviewRequests({ projectId: 'p_alice' }).incoming).toMatchObject([{ seen: true }])
+    alice.service.settleReviewRequest({ projectId: 'p_alice', id: asked.id, how: 'later' })
+    expect(alice.service.reviewRequests({ projectId: 'p_alice' }).incoming).toEqual([])
+    await alice.service.flushReviews()
+    const again = new ReviewInbox({ path: join(alice.dataDir, 'reviews.json'), now: () => 0 })
+    await again.load()
+    expect(again.answerOf(asked.id, (await loadIdentity(bob.dataDir)).publicKey)).toBe('later')
+  })
+
+  it('is refused for anyone not on the roster, and for a task that is not here', async () => {
+    const { bob } = await pair()
+    expect(() => bob.service.requestReview({ worktreeId: 'wt_fix', to: 'mallory' })).toThrow(/not on this project/)
+    expect(() => bob.service.requestReview({ worktreeId: 'wt_gone', to: 'alice' })).toThrow(/no worktree/)
+  })
+
+  it('is dropped alone when malformed, never the snapshot', () => {
+    const snapshot = {
+      revision: 1,
+      handle: 'bob',
+      projects: [{ projectKey: 'k', worktrees: [] }],
+      reviewRequests: [{ id: 'r1', to: '' }]
+    }
+    const read = parsePeerPresence(snapshot, 'k')
+    expect(read?.projects).toHaveLength(1)
+    expect(read).not.toHaveProperty('reviewRequests')
+  })
+})

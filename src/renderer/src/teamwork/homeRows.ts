@@ -10,6 +10,7 @@ import {
 } from '@shared/entities'
 import type { SharedNoteSummary } from '@shared/sharedNote'
 import type { PeerHandoff, TaskStage, TeamworkHandoffs } from '@shared/tasks'
+import type { PeerReviewRequest, TeamworkReviewRequests } from '@shared/teammateReview'
 import { agoLabel, type DotTone } from '../sidebar/agentRows'
 import { teammateRows, teammateWord, twinNames, type TeammatePaneRow } from '../sidebar/teammateRows'
 import { worktreeDisplay } from '../sidebar/worktreeDisplay'
@@ -152,11 +153,16 @@ export function presenceLabel(member: TeamMember, now: number): string {
 
 export type WaitingItem =
   | { kind: 'handoff'; handoff: PeerHandoff }
+  | { kind: 'review'; request: PeerReviewRequest }
   | { kind: 'asking'; handle: string; worktree: string; pane: TeammatePaneRow }
 
-/** Handoffs to take, newest first, then teammates' agents asking with answers this machine may send. */
+/**
+ * Handoffs to take, newest first, then reviews asked of you, oldest first, then teammates' agents asking
+ * with answers this machine may send.
+ */
 export function waitingOnYou(input: {
   handoffs: TeamworkHandoffs | undefined
+  reviewRequests?: TeamworkReviewRequests | undefined
   presence: TeammatePresence | undefined
   now: number
 }): WaitingItem[] {
@@ -168,7 +174,10 @@ export function waitingOnYou(input: {
       .filter((pane) => pane.activity === 'waiting' && pane.choices !== undefined)
       .map((pane): WaitingItem => ({ kind: 'asking', handle: row.handle, worktree: row.name, pane }))
   )
-  return [...handoffs, ...asking]
+  const reviews = [...(input.reviewRequests?.incoming ?? [])]
+    .sort((a, b) => a.at - b.at)
+    .map((request): WaitingItem => ({ kind: 'review', request }))
+  return [...handoffs, ...reviews, ...asking]
 }
 
 export type ActivityItem = {

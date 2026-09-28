@@ -8,9 +8,11 @@ import {
   MAX_REVIEW_LINE_CHARS,
   MAX_REVIEW_LINES,
   MAX_REVIEW_NOTE_CHARS,
+  type PeerReviewRequest,
   type PeerTaskPatch,
   type ReceivedReview,
-  type TeammateDiff
+  type TeammateDiff,
+  type TeamworkReviewRequests
 } from './teammateReview'
 
 const Id = z.string().min(1).max(256)
@@ -51,6 +53,12 @@ export const ReviewParams = {
   teamworkReviews: z.object({ projectId: Id.optional() }),
   /** `seen` retires its popup; `closed` forgets it. */
   teamworkSettleReview: z.object({ id: Id, how: z.enum(['seen', 'closed']) }),
+  /** Asks one teammate on the roster to review one of this machine's tasks; it rides presence to them. */
+  teamworkRequestReview: z.object({ worktreeId: Id, to: z.string().trim().min(1).max(160) }),
+  /** Reviews asked of this machine in one project, and the ones it asked. */
+  teamworkReviewRequests: z.object({ projectId: Id }),
+  /** `seen` retires an incoming request's popup; `later` takes it off this machine's list. */
+  teamworkSettleReviewRequest: z.object({ projectId: Id, id: Id, how: z.enum(['seen', 'later']) }),
   /** PEER-ONLY. One of this machine's tasks as a patch against its base; see `MAX_PEER_PATCH_BYTES`. */
   peerTaskPatch: z.object({ worktreeId: Id }),
   /** PEER-ONLY. A teammate's comments on one of this machine's worktrees; the sender is the link's key. */
@@ -64,6 +72,12 @@ export type ReviewMethodContract = {
   'teamwork.sendReview': { params: z.infer<P['teamworkSendReview']>; result: { delivered: true } }
   'teamwork.reviews': { params: z.infer<P['teamworkReviews']>; result: ReceivedReview[] }
   'teamwork.settleReview': { params: z.infer<P['teamworkSettleReview']>; result: { settled: boolean } }
+  'teamwork.requestReview': { params: z.infer<P['teamworkRequestReview']>; result: PeerReviewRequest }
+  'teamwork.reviewRequests': { params: z.infer<P['teamworkReviewRequests']>; result: TeamworkReviewRequests }
+  'teamwork.settleReviewRequest': {
+    params: z.infer<P['teamworkSettleReviewRequest']>
+    result: { settled: boolean }
+  }
   'peer.taskPatch': { params: z.infer<P['peerTaskPatch']>; result: PeerTaskPatch }
   'peer.review': { params: z.infer<P['peerReview']>; result: { received: true } }
 }

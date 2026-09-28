@@ -73,6 +73,7 @@ import { openInBrowser } from '../shell/openInBrowser'
 import { noticeLifetime } from '../notices/noticeLifetime'
 import { useSharedNotes } from '../teamwork/sharedNotesStore'
 import { useReceivedReviews } from '../teamwork/receivedReviewsStore'
+import { useReviewRequests } from '../teamwork/reviewRequestsStore'
 import { useHandoffs } from '../teamwork/handoffsStore'
 import {
   nextToReopen,
@@ -1645,6 +1646,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     const projectIds = get().projects.map((project) => project.id)
     if (projectIds.length === 0) return
     void useHandoffs.getState().refresh(projectIds)
+    void useReviewRequests.getState().refresh(projectIds)
     const answers = await Promise.all(
       projectIds.map((projectId) =>
         Promise.all([

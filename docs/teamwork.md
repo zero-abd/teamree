@@ -414,6 +414,13 @@ project the sender shares, in `reviews.json` in the app's data directory; they
 show above that task's Review, from where they go to its agent. Nothing is
 queued for an owner who is offline.
 
+**Request Review** on your own row names a teammate on the roster. The request
+rides your presence to them as `{id, to, worktreeId, worktreeName, branch, at}`,
+at most 20, and is your consent to send them that task's diff even with Share
+Task Details off. It lands in their Waiting on you with Review and Later, and
+leaves your presence once their review arrives. Requests and their answers are
+kept in `reviews.json`; a build older than the field ignores it.
+
 ### Offline is stale, not absent
 
 When a peer drops, **their worktrees stay in the sidebar, marked stale**, with

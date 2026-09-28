@@ -13,6 +13,7 @@ import { useWorkspaceStore } from '../state/workspaceStore'
 import { Avatar, type Presence } from './Avatar'
 import { takeHandoff } from './HandoffPopups'
 import { useHandoffs } from './handoffsStore'
+import { reviewRequested, useReviewRequests } from './reviewRequestsStore'
 import { SharedNotesList } from './SharedNotesList'
 import { listedNotes, useSharedNotes } from './sharedNotesStore'
 import { paneState } from './paneState'
@@ -69,6 +70,7 @@ export function TeamHome({ projectId }: { projectId: string }): React.JSX.Elemen
   const terminals = useWorkspaceStore((state) => state.terminals)
   const landings = useWorkspaceStore((state) => state.landings)
   const handoffs = useHandoffs((state) => state.byProject[projectId])
+  const reviewRequests = useReviewRequests((state) => state.byProject[projectId])
   const inbox = useSharedNotes((state) => state.inbox)
   const deleting = useSharedNotes((state) => state.deleting)
 
@@ -106,8 +108,8 @@ export function TeamHome({ projectId }: { projectId: string }): React.JSX.Elemen
   }, [landings, now, projectId, terminals, worktrees])
 
   const members = teamMembers({ list, presence, status, own, memory: teamMemory, now })
-  const waiting = waitingOnYou({ handoffs, presence, now })
-  const asking = waiting.filter((item) => item.kind === 'asking')
+  const waiting = waitingOnYou({ handoffs, reviewRequests, presence, now })
+  const asking = waiting.filter((item) => item.kind === 'asking' || item.kind === 'review')
   const handed = waiting.filter((item) => item.kind === 'handoff')
   const notes = listedNotes({ inbox, deleting }, projectId)
   const activity = teamActivity({ list, handoffs, notes, presence, memory: teamMemory, projectId })
@@ -197,7 +199,8 @@ export function TeamHome({ projectId }: { projectId: string }): React.JSX.Elemen
 }
 
 function rowKey(item: WaitingItem): string {
-  return item.kind === 'handoff' ? item.handoff.id : item.pane.terminalId
+  if (item.kind === 'handoff') return item.handoff.id
+  return item.kind === 'review' ? item.request.id : item.pane.terminalId
 }
 
 function WaitingRow({
@@ -211,6 +214,32 @@ function WaitingRow({
 }): React.JSX.Element {
   const dismiss = useHandoffs((state) => state.dismiss)
   const answerTeammatePane = useWorkspaceStore((state) => state.answerTeammatePane)
+  const settleRequest = useReviewRequests((state) => state.settle)
+  if (item.kind === 'review') {
+    const { request } = item
+    const from = request.from ?? 'a teammate'
+    return (
+      <li className="card home-card home-card--review">
+        <Avatar handle={from} size="md" decorative />
+        <span className="home-card__text">
+          <span className="home-card__title">
+            <span className="home-card__name">{request.worktreeName}</span>
+          </span>
+          <span className="home-card__line">
+            Review requested by {from} · {agoLabel(Math.max(0, now - request.at))}
+          </span>
+        </span>
+        <span className="home-card__actions">
+          <Button variant="primary" size="sm" onClick={() => reviewRequested({ ...request, projectId })}>
+            Review
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => void settleRequest(projectId, request.id, 'later')}>
+            Later
+          </Button>
+        </span>
+      </li>
+    )
+  }
   if (item.kind === 'handoff') {
     const { handoff } = item
     const from = handoff.from ?? 'a teammate'

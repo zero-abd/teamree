@@ -107,6 +107,8 @@ function mount(
     onKeep?: () => void
     onResume?: () => void
     onHandOff?: () => void
+    reviewers?: string[]
+    onRequestReview?: (handle: string) => void
     handoff?: string
     onRemoveCopy?: () => void
     onNewChild?: () => void
@@ -131,6 +133,8 @@ function mount(
         {...(overrides.onResume === undefined ? {} : { onResume: overrides.onResume })}
         {...(overrides.onHandOff === undefined ? {} : { onHandOff: overrides.onHandOff })}
         {...(overrides.handoff === undefined ? {} : { handoff: overrides.handoff })}
+        {...(overrides.reviewers === undefined ? {} : { reviewers: overrides.reviewers })}
+        {...(overrides.onRequestReview === undefined ? {} : { onRequestReview: overrides.onRequestReview })}
         {...(overrides.onRemoveCopy === undefined ? {} : { onRemoveCopy: overrides.onRemoveCopy })}
         {...(overrides.onNewChild === undefined ? {} : { onNewChild: overrides.onNewChild })}
         terminals={overrides.terminals ?? []}
@@ -1337,6 +1341,28 @@ describe('a worktree whose work has landed', () => {
 
     fireEvent.click(screen.getByRole('menuitem', { name: 'Hand Off…' }))
     expect(onHandOff).toHaveBeenCalled()
+  })
+
+  it('asks a teammate for a review from a submenu of who is on the team', () => {
+    const onRequestReview = vi.fn()
+    mount({ reviewers: ['ana', 'bo'], onRequestReview })
+    fireEvent.contextMenu(row())
+    fireEvent.mouseEnter(screen.getByRole('menuitem', { name: 'Request Review' }))
+
+    const who = screen.getByRole('menu', { name: 'Request Review' })
+    expect(
+      within(who)
+        .getAllByRole('menuitem')
+        .map((item) => item.textContent)
+    ).toEqual(['ana', 'bo'])
+    fireEvent.click(within(who).getByRole('menuitem', { name: 'bo' }))
+    expect(onRequestReview).toHaveBeenCalledWith('bo')
+  })
+
+  it('offers no Request Review with nobody to ask', () => {
+    mount({ reviewers: [], onRequestReview: vi.fn() })
+    fireEvent.contextMenu(row())
+    expect(screen.queryByRole('menuitem', { name: 'Request Review' })).toBeNull()
   })
 
   it('offers Remove My Copy once it is taken, without opening the row', () => {

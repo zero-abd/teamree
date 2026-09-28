@@ -320,6 +320,29 @@ describe('what is waiting on you', () => {
     expect(waiting.map((item) => (item.kind === 'handoff' ? item.handoff.id : item.kind))).toEqual(['h2', 'h1'])
   })
 
+  it('lists reviews asked of you after handoffs, oldest first', () => {
+    const request = (id: string, at: number) => ({
+      id,
+      to: 'me',
+      from: 'bo',
+      worktreeId: `peer:bo:${id}`,
+      worktreeName: 'fix footer',
+      branch: 'fix-footer',
+      at
+    })
+    const waiting = waitingOnYou({
+      handoffs: { incoming: [handoff()], outgoing: [] },
+      reviewRequests: { incoming: [request('r2', NOW - 1_000), request('r1', NOW - 5_000)], outgoing: [] },
+      presence: undefined,
+      now: NOW
+    })
+    expect(
+      waiting.map((item) =>
+        item.kind === 'handoff' ? item.handoff.id : item.kind === 'review' ? item.request.id : item.kind
+      )
+    ).toEqual(['h1', 'r1', 'r2'])
+  })
+
   it('lists a teammate’s agent asking with answers you can give from here', () => {
     const asking = theirs({
       panes: [
