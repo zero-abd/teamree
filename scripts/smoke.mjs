@@ -232,8 +232,8 @@ async function checkWindowSurfaces(ask) {
       })()`
     )
 
-  const heading = (text) =>
-    ask(`[...document.querySelectorAll('h1')].some((node) => node.textContent?.trim() === ${JSON.stringify(text)})`)
+  // The page by its landmark's name: Settings titles its head with the section on screen.
+  const heading = (text) => ask(`document.querySelector('main[aria-label=${JSON.stringify(text)}] h1') !== null`)
 
   for (const [label, title] of [
     ['Settings', 'Settings'],

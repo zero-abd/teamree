@@ -1,13 +1,14 @@
 // The settings page: machine-level facts (PATH, updates, text size, checkouts), so it takes the window,
 // one section at a time beside its own section list. Colours and relays are read here and set where they live.
 
-import { createContext, useContext, useEffect, useRef, useState } from 'react'
+import { useContext, useEffect, useRef, useState } from 'react'
 import { agentLaunchCommand } from '@shared/agentLaunch'
 import { branchPrefixFor } from '@shared/branchName'
 import type { Project, RunKind } from '@shared/entities'
 import type { ParamsOf } from '@shared/methods'
 import { RUN_KINDS } from '@shared/runCommands'
 import { DEFAULT_FETCH_MINUTES, type RuntimeSettings } from '@shared/settings'
+import { ACCENT_PRESETS, activeChoice, BUILT_IN_THEMES, resolveTone, themeById } from '@shared/theme'
 import { effectiveProjectSettings, settingSource, startPointOf } from '@shared/projectSettings'
 import { AgentGlyph } from '../agents/glyphs'
 import { Icon } from '../icons/Icon'
@@ -15,24 +16,18 @@ import { harnessName } from '../agents/harnesses'
 import { copyText } from '../clipboard/clipboard'
 import { cliActionLabel, cliOutcome, offerCliInstall } from '../dialogs/cliInstallModel'
 import { Select } from '../ui/Select'
-import { Switch } from '../ui/Switch'
 import { paneNumberRows, shortcutGroups } from '../help/helpTopics'
 import { formatChord, resolvePlatformModifier, type PlatformModifier } from '../keyboard/platformModifier'
 import { menuLabel } from '../menu/menuBar'
 import {
   ANY_PROJECT,
   NO_DEFAULT_AGENT,
-  TERMINAL_LINE_HEIGHT_MAX,
-  TERMINAL_LINE_HEIGHT_MIN,
-  TERMINAL_FONT_MAX_PX,
-  TERMINAL_FONT_MIN_PX,
   TERMINAL_SCROLLBACK_MAX,
   TERMINAL_SCROLLBACK_MIN,
   type AgentNoticePreference,
   type DiffLayout,
   type KeepAwakeMode,
-  type NoticeEvents,
-  type TerminalCursorStyle
+  type NoticeEvents
 } from '../state/preferences'
 import { NoticeTest } from '../notices/NoticeTest'
 import { openInBrowser } from '../shell/openInBrowser'
@@ -42,8 +37,29 @@ import { runtimeClient } from '../runtimeClient/currentRuntimeClient'
 import { InstallerButton } from '../updates/InstallerButton'
 import { installerStep } from '../updates/updateNotice'
 import { PageFrame } from '../workspace/PageFrame'
-import { activeChoice, BUILT_IN_THEMES, themeById } from '@shared/theme'
+import { Brand } from '../shell/Brand'
 import { APPEARANCE_MODE_LABEL } from './AppearanceSettings'
+import { accentName, ThemeGroup } from './AppearancePage'
+import { Switch } from '../ui/Switch'
+import {
+  CheckField,
+  ChoiceField,
+  Field,
+  Group,
+  hitMark,
+  MachineContext,
+  machineRoot,
+  Marked,
+  PathChip,
+  PathText,
+  reasonFor,
+  ShownContext,
+  shownUnder,
+  useDraft,
+  useShown,
+  type Shown
+} from './fields'
+import { CURSOR_STYLES, fontName, TerminalBlock } from './TerminalSettings'
 import { useAddonStatus } from './addonStatus'
 import { usePaneHostStatus } from './paneHostStatus'
 import { useRuntimeSettings, type RuntimeSettingsState } from './runtimeSettings'
@@ -53,9 +69,7 @@ import {
   addonLine,
   agentRows,
   cliLine,
-  describedOnly,
   firstMatch,
-  labelMatches,
   paneHostLines,
   relayPanel,
   rowMatches,
@@ -65,70 +79,6 @@ import {
   type SettingsRow,
   type SettingsSectionId as SectionId
 } from './settingsModel'
-
-/** Which rows the filter keeps: all of them under a section (or project) whose own name matched. */
-type Shown = {
-  whole: boolean
-  query: string
-  row: (label: string) => boolean
-  /** True when the filter is in one of these values or options, so the control holding them is marked. */
-  hit: (words: readonly string[]) => boolean
-}
-
-const ShownContext = createContext<Shown>({ whole: true, query: '', row: () => true, hit: () => false })
-
-function useShown(): Shown {
-  return useContext(ShownContext)
-}
-
-function shownUnder(title: string, query: string, rows: readonly SettingsRow[]): Shown {
-  const whole = labelMatches(title, query) || describedOnly(title, query)
-  return {
-    whole,
-    query,
-    row: (label) => whole || rows.some((row) => row.label === label && rowMatches(row, query)),
-    hit: (words) => query.trim() !== '' && words.some((word) => word !== '' && labelMatches(word, query))
-  }
-}
-
-/** The text, with the filter's words marked where they occur; a label found by what it is about is marked whole. */
-function Marked({ text }: { text: string }): React.JSX.Element {
-  const { query } = useShown()
-  const wanted = query.trim().toLowerCase()
-  const at = wanted === '' ? -1 : text.toLowerCase().indexOf(wanted)
-  if (at < 0) return describedOnly(text, query) ? <mark className="settings-match">{text}</mark> : <>{text}</>
-  return (
-    <>
-      {text.slice(0, at)}
-      <mark className="settings-match">{text.slice(at, at + wanted.length)}</mark>
-      {text.slice(at + wanted.length)}
-    </>
-  )
-}
-
-/** This Mac's settings, read once for the page so a change in General reaches the projects' rows. */
-const MachineContext = createContext<RuntimeSettingsState>({
-  settings: null,
-  problem: null,
-  change: () => {},
-  save: async () => {}
-})
-
-/** Where new worktrees go when a project names no folder. */
-function machineRoot(settings: RuntimeSettings | null): string {
-  return settings?.worktreesRoot ?? settings?.worktreesRootFallback ?? ''
-}
-
-/** For a control: the attribute that marks it when the filter matched one of its values. */
-function hitMark(shown: Shown, words: readonly string[]): { 'data-match'?: true } {
-  return shown.hit(words) ? { 'data-match': true } : {}
-}
-
-const CURSOR_STYLES: readonly { value: TerminalCursorStyle; label: string }[] = [
-  { value: 'bar', label: 'Bar' },
-  { value: 'block', label: 'Block' },
-  { value: 'underline', label: 'Underline' }
-]
 
 const NOTICE_CHOICES: readonly { value: AgentNoticePreference; label: string }[] = [
   { value: 'off', label: 'Never' },
@@ -179,7 +129,7 @@ function useShortcutRows(modifier: PlatformModifier): ShortcutRow[] {
   ])
 }
 
-/** Every theme and mode by name: the options behind the Theme row's Change… button. */
+/** Every theme and mode by name: the options the Theme row offers. */
 const THEME_WORDS = [...BUILT_IN_THEMES.map((theme) => theme.name), ...Object.values(APPEARANCE_MODE_LABEL)]
 
 function useAgentRows(): AgentRow[] {
@@ -291,7 +241,7 @@ function useSectionRows(
     ],
     panes: [
       { label: 'Terminal text size', words: [`${fontSize}px`] },
-      { label: 'Font', words: [options.fontFamily] },
+      { label: 'Font', words: [fontName(options.fontFamily), options.fontFamily] },
       { label: 'Line height', words: [String(options.lineHeight)] },
       { label: 'Cursor', words: [...CURSOR_STYLES.map((style) => style.label), 'Blink'] },
       { label: 'Option as Meta', words: [] },
@@ -306,7 +256,10 @@ function useSectionRows(
       ...NOTICE_EVENTS.map((entry) => ({ label: entry.label, words: [] }))
     ],
     teamwork: [{ label: 'Share Task Details', words: [] }],
-    appearance: [{ label: 'Theme', words: [themeValue, ...THEME_WORDS] }],
+    appearance: [
+      { label: 'Theme', words: [themeValue, ...THEME_WORDS] },
+      { label: 'Accent', words: ACCENT_PRESETS.map((preset) => preset.name) }
+    ],
     shortcuts: shortcuts.map((row) => ({ label: row.label, words: [row.chord] })),
     addons: [{ label: 'Jac Graph Memory', words: [] }],
     updates: [{ label: 'Check Automatically', words: [] }],
@@ -426,17 +379,30 @@ export function SettingsView({
     />
   )
 
+  const lead = filtering ? null : (SETTINGS_SECTIONS.find((entry) => entry.id === active) ?? null)
+
   return (
     <PageFrame
       label="Settings"
-      title="Settings"
+      title={lead?.label ?? 'Search'}
+      icon={lead?.icon ?? 'search'}
+      lede={
+        lead === null ? (
+          sections.length === 0 ? (
+            'No matches'
+          ) : (
+            `${sections.length} ${sections.length === 1 ? 'section' : 'sections'}`
+          )
+        ) : (
+          <SectionMeta id={lead.id} machine={machine.settings} modifier={modifier} />
+        )
+      }
       onClose={toggleSettings}
       bodyRef={body}
       bodyTestId="settings-body"
       side={side}
     >
       <div className={filtering ? 'settings__content settings__content--found' : 'settings__content'}>
-        {sections.length === 0 ? <p className="settings-note">No matches</p> : null}
         <MachineContext.Provider value={machine}>
           {onScreen.map((entry) => (
             <ShownContext.Provider key={entry.id} value={shownUnder(entry.label, query, rowsOf(entry.id))}>
@@ -447,6 +413,81 @@ export function SettingsView({
       </div>
     </PageFrame>
   )
+}
+
+const KEEP_AWAKE_META: Record<KeepAwakeMode, string> = {
+  agent: 'Awake while agents work',
+  on: 'Always awake',
+  off: 'Keep awake off'
+}
+
+/** A section's one line under the page title: what it is set to now, at a glance. */
+function SectionMeta({
+  id,
+  machine,
+  modifier
+}: {
+  id: SectionId
+  machine: RuntimeSettings | null
+  modifier: PlatformModifier
+}): React.JSX.Element {
+  const store = {
+    cli: useWorkspaceStore((state) => state.cli),
+    update: useWorkspaceStore((state) => state.update),
+    editorCommands: useWorkspaceStore((state) => state.editorCommands),
+    editors: useWorkspaceStore((state) => state.editors),
+    terminalOptions: useWorkspaceStore((state) => state.terminalOptions),
+    terminalFontSize: useWorkspaceStore((state) => state.terminalFontSize),
+    appearance: useWorkspaceStore((state) => state.appearance),
+    systemTone: useWorkspaceStore((state) => state.systemTone),
+    noticeEvents: useWorkspaceStore((state) => state.noticeEvents),
+    agentNotices: useWorkspaceStore((state) => state.agentNotices),
+    worktrees: useWorkspaceStore((state) => state.worktrees),
+    keepAwake: useWorkspaceStore((state) => state.keepAwake),
+    defaultAgent: useWorkspaceStore((state) => state.defaultAgent),
+    projects: useWorkspaceStore((state) => state.projects),
+    diffLayout: useWorkspaceStore((state) => state.diffLayout)
+  }
+  const cli = cliLine(store.cli)
+  const update = updatePanel(store.update, useNow())
+  const rows = useAgentRows()
+  const agents = rows.filter((row) => row.command !== null)
+  const preferred = rows.find((row) => row.kind === store.defaultAgent)
+  const shortcuts = useShortcutRows(modifier)
+  const editor = editorPicker(ANY_PROJECT, store.editorCommands, store.editors)
+  const editorLabel =
+    editor.editors.find((entry) => entry.command === editor.stored)?.label ??
+    (editor.stored === '' ? (editor.editors[0]?.label ?? 'No editor') : editor.stored)
+  const font = `${fontName(store.terminalOptions.fontFamily)} ${store.terminalFontSize}`
+  const tone = resolveTone(store.appearance, store.systemTone)
+  const count = (n: number, one: string, many = `${one}s`): string => `${n} ${n === 1 ? one : many}`
+  const events = NOTICE_EVENTS.filter((entry) => store.noticeEvents[entry.event]).length
+  const notify = NOTICE_CHOICES.find((choice) => choice.value === store.agentNotices)?.label ?? ''
+  const fetch = FETCH_CHOICES.find((choice) => choice.value === String(machine?.fetchMinutes ?? DEFAULT_FETCH_MINUTES))
+  const lines: Record<SectionId, string> = {
+    general: [count(store.worktrees.length, 'worktree'), editorLabel, KEEP_AWAKE_META[store.keepAwake]].join(' · '),
+    agents: [preferred === undefined ? 'First found' : harnessName(preferred.kind), count(agents.length, 'agent')].join(
+      ' · '
+    ),
+    projects: count(store.projects.length, 'project'),
+    git: [
+      `Fetch every ${fetch?.label ?? `${machine?.fetchMinutes} minutes`}`,
+      `${store.diffLayout === 'split' ? 'Side by side' : 'Inline'} diffs`
+    ].join(' · '),
+    panes: [
+      font,
+      `${CURSOR_STYLES.find((style) => style.value === store.terminalOptions.cursorStyle)?.label ?? ''} cursor`,
+      `${store.terminalOptions.scrollback.toLocaleString('en-US')} lines`
+    ].join(' · '),
+    notices: store.agentNotices === 'off' ? 'Off' : `${notify} · ${events} of ${NOTICE_EVENTS.length} events`,
+    teamwork: (machine?.shareTaskDetails ?? true) ? 'Task details shared' : 'Task details private',
+    appearance: [tone === 'light' ? 'Light' : 'Dark', accentName(store.appearance, store.systemTone), font].join(' · '),
+    shortcuts: count(shortcuts.length, 'shortcut'),
+    addons: `Jac Graph Memory · ${machine?.jacMemoryAddon ? 'On' : 'Off'}`,
+    updates: [update.headline, update.lastChecked].filter(Boolean).join(' · '),
+    cli: cli.status
+  }
+  return <>{lines[id]}</>
 }
 
 function SectionBody({
@@ -569,6 +610,9 @@ function SettingsSide({
 
   return (
     <div className="settings-side">
+      <div className="settings-side__brand">
+        <Brand />
+      </div>
       <label className="settings-search">
         <Icon name="search" size={14} className="settings-search__icon" />
         <input
@@ -629,89 +673,19 @@ function SettingsSide({
   )
 }
 
-/** A section's heading: the page's title for it, and where Settings › that section lands the focus. */
+/**
+ * A section's heading, where Settings › that section lands the focus. The page head names a lone section,
+ * so this one shows only under a filter, where several are listed.
+ */
 function SectionTitle({ id, text }: { id: SectionId; text: string }): React.JSX.Element {
+  const icon = SETTINGS_SECTIONS.find((entry) => entry.id === id)?.icon ?? 'settings'
   return (
     <h2 className="settings-section__title" id={`settings-${id}`} tabIndex={-1}>
+      <span className="settings-section__tile" aria-hidden="true">
+        <Icon name={icon} />
+      </span>
       <Marked text={text} />
     </h2>
-  )
-}
-
-/** One card of rows, with an optional small title; hidden by the stylesheet when the filter empties it. */
-function Group({ title, children }: { title?: string; children: React.ReactNode }): React.JSX.Element {
-  return (
-    <div className="settings-card">
-      {title === undefined ? null : <h3 className="settings-card__title">{title}</h3>}
-      <div className="settings-group">{children}</div>
-    </div>
-  )
-}
-
-/**
- * One row: the label (and at most a one-line hint) on the left, the control right-aligned in the control column.
- * `wide` gives the control the rest of the row, for a path or a value with buttons.
- */
-function Field({
-  label,
-  htmlFor,
-  heading = false,
-  hint,
-  source,
-  wide = false,
-  below,
-  children
-}: {
-  label: string
-  /** The control the label names; a row whose control is a value and buttons has none. */
-  htmlFor?: string
-  heading?: boolean
-  hint?: string
-  /** Where the value comes from, under the label. */
-  source?: React.ReactNode
-  wide?: boolean
-  /** Across the whole row under both, e.g. the command a field builds. */
-  below?: React.ReactNode
-  children: React.ReactNode
-}): React.JSX.Element {
-  const text = <Marked text={label} />
-  return (
-    <div className={wide ? 'settings-field settings-field--wide' : 'settings-field'}>
-      <div className="settings-field__text">
-        {htmlFor !== undefined ? (
-          <label className="settings-field__label" htmlFor={htmlFor}>
-            {text}
-          </label>
-        ) : heading ? (
-          <h4 className="settings-field__label">{text}</h4>
-        ) : (
-          <span className="settings-field__label">{text}</span>
-        )}
-        {hint === undefined ? null : <span className="settings-field__hint">{hint}</span>}
-        {source}
-      </div>
-      <div className="settings-field__control">{children}</div>
-      {below ? <div className="settings-field__below">{below}</div> : null}
-    </div>
-  )
-}
-
-/** A path on one line, cut in the middle so its last two parts stay; the whole path on hover. */
-function PathText({ path, className = '' }: { path: string; className?: string }): React.JSX.Element {
-  const parts = path.split('/')
-  const tail = parts.length > 3 ? parts.slice(-2).join('/') : path
-  const head = path.slice(0, path.length - tail.length)
-  return (
-    <code className={`settings-path ${className}`.trim()} title={path}>
-      {head === '' ? null : (
-        <span className="settings-path__head">
-          <Marked text={head} />
-        </span>
-      )}
-      <span className="settings-path__tail">
-        <Marked text={tail} />
-      </span>
-    </code>
   )
 }
 
@@ -728,7 +702,7 @@ function CliSection(): React.JSX.Element {
   return (
     <section className="settings-section" aria-labelledby="settings-cli">
       <SectionTitle id="cli" text="CLI" />
-      <Group>
+      <Group title="Command">
         <Field label="Status">
           <span className="settings-value">{line.status}</span>
           {line.action ? (
@@ -745,7 +719,7 @@ function CliSection(): React.JSX.Element {
         </Field>
         {line.paths.map((row) => (
           <Field key={row.label} label={row.label} wide>
-            <PathText path={row.path} />
+            <PathChip path={row.path} />
           </Field>
         ))}
 
@@ -774,7 +748,7 @@ function AddonsSection(): React.JSX.Element {
   return (
     <section className="settings-section" aria-labelledby="settings-addons">
       <SectionTitle id="addons" text="Add-ons" />
-      <Group>
+      <Group title="Memory">
         {shown.row('Jac Graph Memory') ? (
           <Field
             label="Jac Graph Memory"
@@ -851,7 +825,7 @@ function UpdatesSection(): React.JSX.Element {
   return (
     <section className="settings-section" aria-labelledby="settings-updates">
       <SectionTitle id="updates" text="Updates" />
-      <Group>
+      <Group title="Version">
         {shown.whole ? (
           <div className="settings-row">
             <p className="settings-fact">{panel.headline}</p>
@@ -987,10 +961,6 @@ function GeneralSection(): React.JSX.Element {
   )
 }
 
-function reasonFor(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
-}
-
 /**
  * Where new worktrees go: the folder in effect, Choose… to pick another, Reveal, and Reset while `own` is set.
  * A folder inside a repository is refused once, then taken with Use Anyway.
@@ -1049,7 +1019,7 @@ function WorktreesIn({
         )
       }
     >
-      <PathText path={applied} />
+      <PathChip path={applied} />
       <button
         type="button"
         className="button button--small"
@@ -1094,6 +1064,7 @@ function BranchPrefix({
     <Field
       label="Branch prefix"
       htmlFor={id}
+      hint="Added to generated branches"
       source={source}
       below={problem === null ? null : <p className="settings-error">{problem}</p>}
     >
@@ -1121,7 +1092,7 @@ function NoticesSection(): React.JSX.Element {
   return (
     <section className="settings-section" aria-labelledby="settings-notices">
       <SectionTitle id="notices" text="Notifications" />
-      <Group>
+      <Group title="Alerts">
         {shown.row('Notify') ? (
           <ChoiceField
             id="settings-agent-notices"
@@ -1153,11 +1124,11 @@ function NoticesSection(): React.JSX.Element {
 
 /** What teammates' presence carries from this machine. */
 function TeamworkSection(): React.JSX.Element {
-  const { settings, problem, change } = useRuntimeSettings()
+  const { settings, problem, change } = useContext(MachineContext)
   return (
     <section className="settings-section" aria-labelledby="settings-teamwork">
       <SectionTitle id="teamwork" text="Teamwork" />
-      <Group>
+      <Group title="Presence">
         <CheckField
           id="settings-share-task-details"
           label="Share Task Details"
@@ -1173,18 +1144,11 @@ function TeamworkSection(): React.JSX.Element {
 
 /** How every pane draws and reads keys. */
 function PanesSection(): React.JSX.Element {
-  const terminalFontSize = useWorkspaceStore((state) => state.terminalFontSize)
-  const setTerminalFontSize = useWorkspaceStore((state) => state.setTerminalFontSize)
   const options = useWorkspaceStore((state) => state.terminalOptions)
   const setOptions = useWorkspaceStore((state) => state.setTerminalOptions)
-  const font = useDraft(options.fontFamily, (value) => setOptions({ fontFamily: value }))
   const scrollback = useDraft(String(options.scrollback), (value) => {
     const lines = Number.parseInt(value, 10)
     if (Number.isFinite(lines)) setOptions({ scrollback: lines })
-  })
-  const lineHeight = useDraft(String(options.lineHeight), (value) => {
-    const height = Number.parseFloat(value)
-    if (Number.isFinite(height)) setOptions({ lineHeight: height })
   })
   const stopAgent = useWorkspaceStore((state) => state.confirmations.stopAgent)
   const setConfirmation = useWorkspaceStore((state) => state.setConfirmation)
@@ -1194,93 +1158,10 @@ function PanesSection(): React.JSX.Element {
   return (
     <section className="settings-section" aria-labelledby="settings-panes">
       <SectionTitle id="panes" text="Panes" />
-      <Group title="Terminal">
-        {shown.row('Terminal text size') ? (
-          <Field label="Terminal text size" htmlFor="settings-font-size">
-            <div className="settings-size">
-              <input
-                id="settings-font-size"
-                className="settings-size__range"
-                type="range"
-                min={TERMINAL_FONT_MIN_PX}
-                max={TERMINAL_FONT_MAX_PX}
-                step={1}
-                value={terminalFontSize}
-                onChange={(event) => setTerminalFontSize(Number(event.target.value))}
-              />
-              {/* A slider with no scale cannot say how big it is now. */}
-              <output className="settings-size__value" htmlFor="settings-font-size">
-                <Marked text={`${terminalFontSize}px`} />
-              </output>
-            </div>
-          </Field>
-        ) : null}
+      <TerminalBlock idPrefix="settings" />
 
-        {shown.row('Font') ? (
-          <Field
-            label="Font"
-            htmlFor="settings-font"
-            below={
-              // The draft, not the stored value: the point is to see a face before keeping it.
-              <div
-                className="settings-font-preview"
-                data-testid="settings-font-preview"
-                style={{ fontFamily: font.value, fontSize: terminalFontSize }}
-              >
-                ~/repo $ git status 0O 1lI {'{}'} =&gt; !=
-              </div>
-            }
-          >
-            <input
-              id="settings-font"
-              className="settings-input"
-              type="text"
-              {...font}
-              {...hitMark(shown, [options.fontFamily])}
-            />
-          </Field>
-        ) : null}
-
-        {shown.row('Line height') ? (
-          <Field label="Line height" htmlFor="settings-line-height">
-            <input
-              id="settings-line-height"
-              className="settings-input settings-input--number"
-              type="number"
-              min={TERMINAL_LINE_HEIGHT_MIN}
-              max={TERMINAL_LINE_HEIGHT_MAX}
-              step={0.05}
-              {...lineHeight}
-              {...hitMark(shown, [String(options.lineHeight)])}
-            />
-          </Field>
-        ) : null}
-
-        {shown.row('Cursor') ? (
-          <Field label="Cursor" htmlFor="settings-cursor">
-            <Select
-              id="settings-cursor"
-              value={options.cursorStyle}
-              onChange={(event) => setOptions({ cursorStyle: event.target.value as TerminalCursorStyle })}
-              {...hitMark(
-                shown,
-                CURSOR_STYLES.map((style) => style.label)
-              )}
-            >
-              {CURSOR_STYLES.map((style) => (
-                <option key={style.value} value={style.value}>
-                  {style.label}
-                </option>
-              ))}
-            </Select>
-            <label className="settings-inline">
-              <span>
-                <Marked text="Blink" />
-              </span>
-              <Switch checked={options.cursorBlink} onChange={(cursorBlink) => setOptions({ cursorBlink })} />
-            </label>
-          </Field>
-        ) : null}
+      <Group title="Shell">
+        {shown.row('Shell') ? <ShellField /> : null}
 
         {shown.row('Scrollback lines') ? (
           <Field label="Scrollback lines" htmlFor="settings-scrollback">
@@ -1296,8 +1177,6 @@ function PanesSection(): React.JSX.Element {
             />
           </Field>
         ) : null}
-
-        {shown.row('Shell') ? <ShellField /> : null}
       </Group>
 
       <Group title="Keys">
@@ -1494,101 +1373,6 @@ function ShortcutsSection({ modifier }: { modifier: PlatformModifier }): React.J
   )
 }
 
-/** A label and its switch: the page's one shape for an on/off setting. */
-function CheckField({
-  id,
-  label,
-  checked,
-  disabled = false,
-  onChange
-}: {
-  id: string
-  label: string
-  checked: boolean
-  disabled?: boolean
-  onChange: (checked: boolean) => void
-}): React.JSX.Element {
-  return (
-    <Field label={label} htmlFor={id}>
-      <Switch id={id} checked={checked} disabled={disabled} onChange={onChange} />
-    </Field>
-  )
-}
-
-/** A label and a picker over a fixed set of values. */
-function ChoiceField<T extends string>({
-  id,
-  label,
-  value,
-  choices,
-  onChange,
-  children
-}: {
-  id: string
-  label: string
-  value: T
-  choices: readonly { value: T; label: string }[]
-  onChange: (value: T) => void
-  /** Beside the picker, e.g. a button that tries the setting. */
-  children?: React.ReactNode
-}): React.JSX.Element {
-  const shown = useShown()
-  return (
-    <Field label={label} htmlFor={id}>
-      {children}
-      <Select
-        id={id}
-        value={value}
-        onChange={(event) => onChange(event.target.value as T)}
-        {...hitMark(
-          shown,
-          choices.map((choice) => choice.label)
-        )}
-      >
-        {choices.map((choice) => (
-          <option key={choice.value} value={choice.value}>
-            {choice.label}
-          </option>
-        ))}
-      </Select>
-    </Field>
-  )
-}
-
-/** A text field that keeps its value on blur or Enter, and takes the stored spelling back whenever that moves. */
-function useDraft(
-  stored: string,
-  commit: (value: string) => void
-): Pick<
-  React.InputHTMLAttributes<HTMLInputElement>,
-  'onChange' | 'onBlur' | 'onKeyDown' | 'autoComplete' | 'spellCheck'
-> & {
-  value: string
-} {
-  const [draft, setDraft] = useState(stored)
-  useEffect(() => {
-    setDraft(stored)
-  }, [stored])
-  // Reset first: a value the store clamps back to what it held changes nothing the effect can see.
-  const keep = (): void => {
-    const next = draft.trim()
-    setDraft(stored)
-    if (next !== stored) commit(next)
-  }
-  return {
-    value: draft,
-    autoComplete: 'off',
-    spellCheck: false,
-    onChange: (event) => setDraft(event.target.value),
-    onBlur: keep,
-    onKeyDown: (event) => {
-      if (event.key !== 'Enter') return
-      event.preventDefault()
-      keep()
-    }
-  }
-}
-
 /**
  * Which agent you always use, what you pass it, whether new worktrees get the main checkout's
  * folder trust, and whether agents hear about sibling overlaps; per machine, shown once the probe found one.
@@ -1724,30 +1508,13 @@ function AgentArguments({ agent }: { agent: AgentRow }): React.JSX.Element {
   )
 }
 
-/** The theme in effect; changing it happens in the sheet beside the panes, where it can be seen. */
+/** Themes as they paint, the accent, and the terminal they colour; the full editor is the sheet's. */
 function AppearanceSection(): React.JSX.Element {
-  const showAppearance = useWorkspaceStore((state) => state.showAppearance)
-  const value = useThemeValue()
-  const shown = useShown()
-
   return (
     <section className="settings-section" aria-labelledby="settings-appearance">
       <SectionTitle id="appearance" text="Appearance" />
-      <Group>
-        <Field label="Theme" wide>
-          <p className="settings-value">
-            <Marked text={value} />
-          </p>
-          <button
-            type="button"
-            className="button button--small"
-            onClick={() => showAppearance(true)}
-            {...hitMark(shown, THEME_WORDS)}
-          >
-            Change…
-          </button>
-        </Field>
-      </Group>
+      <ThemeGroup />
+      <TerminalBlock idPrefix="settings-appearance" />
     </section>
   )
 }

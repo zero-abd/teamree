@@ -176,6 +176,8 @@ describe('stylesheets', () => {
         // A worktree box an agent in it is asking from: its edge and its tint.
         '.worktree--asking',
         '.worktree--asking::before',
+        // An asking worktree in a theme's miniature window.
+        '.mini-window__tree--asking',
         // The status pill and the notice of an agent that is asking.
         '.status--asking',
         '.toast--asking::before'
