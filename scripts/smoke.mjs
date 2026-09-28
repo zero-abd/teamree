@@ -448,7 +448,7 @@ async function checkSettingsSearch(window, ask) {
   console.log(`smoke: Settings search measured at ${SETTINGS_WIDTHS_CHECKED.join(', ')}px`)
 }
 
-/** A long name, a long base ref and a team at the narrowest and the default sidebar: nothing drawn over anything (#488). */
+/** A long name, a long base ref and a team at the narrowest and the default sidebar: nothing drawn over anything, New Task and ⋯ in sight (#488). */
 async function checkProjectHead(ask) {
   if (!(await ask('Boolean(document.querySelector(".project__head"))'))) return
   for (const team of [false, true]) {

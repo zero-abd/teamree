@@ -913,7 +913,8 @@ export const Params = {
   appearanceSet: THEME_CHOICE.extend({
     mode: z.enum(APPEARANCE_MODES as [AppearanceMode, ...AppearanceMode[]]).optional(),
     /** The slot painted while the window is light. */
-    light: THEME_CHOICE.optional()
+    light: THEME_CHOICE.optional(),
+    projectButtons: z.boolean().optional()
   }),
 
   /** One text file of a worktree, for a file pane; `path` may not leave the worktree. Local only. */

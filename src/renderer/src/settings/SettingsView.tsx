@@ -39,7 +39,7 @@ import { installerStep } from '../updates/updateNotice'
 import { PageFrame } from '../workspace/PageFrame'
 import { Brand } from '../shell/Brand'
 import { APPEARANCE_MODE_LABEL } from './AppearanceSettings'
-import { accentName, ThemeGroup } from './AppearancePage'
+import { accentName, SidebarGroup, ThemeGroup } from './AppearancePage'
 import { Switch } from '../ui/Switch'
 import {
   CheckField,
@@ -258,7 +258,8 @@ function useSectionRows(
     teamwork: [{ label: 'Share Task Details', words: [] }],
     appearance: [
       { label: 'Theme', words: [themeValue, ...THEME_WORDS] },
-      { label: 'Accent', words: ACCENT_PRESETS.map((preset) => preset.name) }
+      { label: 'Accent', words: ACCENT_PRESETS.map((preset) => preset.name) },
+      { label: 'Project Bar Buttons', words: [] }
     ],
     shortcuts: shortcuts.map((row) => ({ label: row.label, words: [row.chord] })),
     addons: [{ label: 'Jac Graph Memory', words: [] }],
@@ -1508,12 +1509,13 @@ function AgentArguments({ agent }: { agent: AgentRow }): React.JSX.Element {
   )
 }
 
-/** Themes as they paint, the accent, and the terminal they colour; the full editor is the sheet's. */
+/** Themes as they paint, the accent, the sidebar's buttons, and the terminal; the full editor is the sheet's. */
 function AppearanceSection(): React.JSX.Element {
   return (
     <section className="settings-section" aria-labelledby="settings-appearance">
       <SectionTitle id="appearance" text="Appearance" />
       <ThemeGroup />
+      <SidebarGroup />
       <TerminalBlock idPrefix="settings-appearance" />
     </section>
   )

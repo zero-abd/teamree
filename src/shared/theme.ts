@@ -494,6 +494,8 @@ export type Appearance = ThemeChoice & {
   mode?: AppearanceMode
   /** Absent until edited: the Light preset as shipped. */
   light?: ThemeChoice
+  /** False draws a project head's New Task and ⋯ only under the pointer; absent shows them. */
+  projectButtons?: boolean
 }
 
 export const DEFAULT_APPEARANCE: Appearance = {
@@ -552,6 +554,7 @@ export function sanitizeAppearance(raw: unknown): Appearance {
   if (typeof record.light === 'object' && record.light !== null) {
     appearance.light = sanitizeChoice(record.light as Record<string, unknown>, DEFAULT_LIGHT_THEME_ID)
   }
+  if (typeof record.projectButtons === 'boolean') appearance.projectButtons = record.projectButtons
   return appearance
 }
 

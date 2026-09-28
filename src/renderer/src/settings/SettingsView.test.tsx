@@ -1074,6 +1074,42 @@ describe('appearance', () => {
   })
 })
 
+describe('the project bar buttons', () => {
+  const setAppearance = vi.fn()
+  beforeEach(() => setAppearance.mockReset())
+
+  it('shows them by default, and turns them off and on again from Appearance', () => {
+    seed({ setAppearance })
+    renderAt('appearance')
+    const section = screen.getByRole('region', { name: 'Appearance' })
+    const toggle = within(section).getByRole('switch', { name: 'Project Bar Buttons' }) as HTMLInputElement
+    expect(toggle.checked).toBe(true)
+    expect(within(section).getByText('Show + and ⋯ on project rows')).toBeTruthy()
+    fireEvent.click(toggle)
+    expect(setAppearance).toHaveBeenLastCalledWith({ ...INITIAL.appearance, projectButtons: false })
+  })
+
+  it('reads off when Appearance holds them off', () => {
+    seed({ setAppearance, appearance: { ...INITIAL.appearance, projectButtons: false } })
+    renderAt('appearance')
+    const toggle = screen.getByRole('switch', { name: 'Project Bar Buttons' }) as HTMLInputElement
+    expect(toggle.checked).toBe(false)
+    fireEvent.click(toggle)
+    expect(setAppearance).toHaveBeenLastCalledWith({ ...INITIAL.appearance, projectButtons: true })
+  })
+
+  it('is found by its name and by what it is about', () => {
+    render(<SettingsView />)
+    const filter = screen.getByRole('searchbox', { name: 'Filter settings' })
+    for (const words of ['project bar', 'hover']) {
+      fireEvent.change(filter, { target: { value: words } })
+      expect(screen.getByRole('switch', { name: 'Project Bar Buttons' })).toBeTruthy()
+    }
+    fireEvent.change(filter, { target: { value: 'hover' } })
+    expect(screen.queryByRole('button', { name: 'Customize…' })).toBeNull()
+  })
+})
+
 describe('the filter', () => {
   const filter = (): HTMLInputElement => screen.getByRole('searchbox', { name: 'Filter settings' }) as HTMLInputElement
   const type = (text: string): void => {

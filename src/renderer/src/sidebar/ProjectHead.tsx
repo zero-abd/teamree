@@ -159,7 +159,7 @@ export function ProjectHead({
       </div>
       <div className="project__actions">
         {team}
-        {/* At the end at rest; New Task and ⋯ take its place under the pointer. Folded, theirs are counted apart. */}
+        {/* Before New Task and ⋯, or in their place while they wait for the pointer. Folded, theirs are counted apart. */}
         <span
           className="project__count"
           aria-hidden="true"

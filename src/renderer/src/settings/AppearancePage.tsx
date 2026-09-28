@@ -22,7 +22,7 @@ import {
 } from '@shared/theme'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { Segmented } from '../ui/Segmented'
-import { Field, Group, hitMark, Marked, useShown } from './fields'
+import { CheckField, Field, Group, hitMark, Marked, useShown } from './fields'
 
 const MODE_LABEL: Record<AppearanceMode, string> = { system: 'System', light: 'Light', dark: 'Dark' }
 
@@ -164,6 +164,25 @@ export function ThemeGroup(): React.JSX.Element | null {
         </div>
       ) : null}
       {shown.row('Accent') ? <AccentRow /> : null}
+    </Group>
+  )
+}
+
+/** How the sidebar draws: New Task and ⋯ on every project head, or only under the pointer. */
+export function SidebarGroup(): React.JSX.Element | null {
+  const appearance = useWorkspaceStore((state) => state.appearance)
+  const setAppearance = useWorkspaceStore((state) => state.setAppearance)
+  const shown = useShown()
+  if (!shown.row('Project Bar Buttons')) return null
+  return (
+    <Group title="Sidebar">
+      <CheckField
+        id="settings-project-buttons"
+        label="Project Bar Buttons"
+        hint="Show + and ⋯ on project rows"
+        checked={appearance.projectButtons !== false}
+        onChange={(projectButtons) => void setAppearance({ ...appearance, projectButtons })}
+      />
     </Group>
   )
 }

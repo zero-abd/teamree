@@ -223,6 +223,7 @@ export const SETTINGS_CATALOG: readonly SettingEntry[] = [
   { section: 'notices', label: 'Teammate Shares a Note', about: 'notification team teammates shared note' },
   { section: 'teamwork', label: 'Share Task Details', about: 'privacy presence teammates' },
   { section: 'appearance', label: 'Theme', about: 'colors colours dark light mode' },
+  { section: 'appearance', label: 'Project Bar Buttons', about: 'sidebar new task plus menu icons hover always' },
   { section: 'shortcuts', label: 'Shortcuts', about: 'keyboard keys keybindings hotkeys chords' },
   { section: 'addons', label: 'Jac Graph Memory', about: 'jaseci graph history co-change why provenance uv plugin' },
   { section: 'updates', label: 'Check Automatically', about: 'update version release' },
