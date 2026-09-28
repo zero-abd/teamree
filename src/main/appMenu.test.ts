@@ -533,6 +533,8 @@ describe('the menu bar’s wording', () => {
           item.kind === 'action' &&
           !item.id.startsWith('theme:') &&
           !item.id.startsWith('setting:') &&
+          // Ends in the worktree's own name, which is the person's words.
+          !item.id.startsWith('task-in:') &&
           item.id !== 'install-cli'
       )
       .map((item) => item.label)

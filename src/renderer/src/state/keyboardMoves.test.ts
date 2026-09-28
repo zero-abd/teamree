@@ -22,6 +22,7 @@ vi.mock('../runtimeClient/currentRuntimeClient', () => ({
 }))
 
 const { useWorkspaceStore } = await import('./workspaceStore')
+const { useSidebarView } = await import('./sidebarViewStore')
 const { shownRoot } = await import('../panes/paneLayout')
 
 const INITIAL = useWorkspaceStore.getState()
@@ -100,6 +101,37 @@ describe('walking the worktrees', () => {
   it('opens the worktree it lands on, rather than only naming it', () => {
     store().stepWorktree(1)
     expect(store().openWorktreeIds).toContain('w3')
+  })
+
+  // Sort by Attention puts p1's asking w3 above w1; the chord walks that order.
+  it('walks the order Sort by Attention draws', () => {
+    useSidebarView.setState({ byAttention: ['p1'] })
+    const asking = {
+      id: 't3',
+      worktreeId: 'w3',
+      title: 'claude',
+      cwd: '/repos/p1-wt/w3',
+      shell: '/bin/zsh',
+      cols: 80,
+      rows: 24,
+      running: true,
+      busy: false,
+      lastOutputAt: 0,
+      agent: 'claude' as const,
+      agentEvent: { event: 'Notification' as const, at: 1 }
+    }
+    useWorkspaceStore.setState({ terminals: { t3: asking }, activeWorktreeId: 'w3' })
+    try {
+      store().stepWorktree(1)
+      expect(store().activeWorktreeId).toBe('w1')
+      store().stepWorktree(1)
+      expect(store().activeWorktreeId).toBe('w2')
+      store().stepWorktree(-1)
+      store().stepWorktree(-1)
+      expect(store().activeWorktreeId).toBe('w3')
+    } finally {
+      useSidebarView.setState({ byAttention: [] })
+    }
   })
 })
 

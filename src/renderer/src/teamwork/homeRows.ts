@@ -101,17 +101,11 @@ export function teamMembers(input: {
     .sort((a, b) => PRESENCE_ORDER[a.presence] - PRESENCE_ORDER[b.presence] || a.handle.localeCompare(b.handle))
 }
 
-/** Who is here now, you included once you are on the roster: the count the page's head gives. */
-export function onlineCount(input: {
-  list: MemberList | undefined
-  presence: TeammatePresence | undefined
-  status: TeamworkStatus | undefined
-}): number {
-  const heard = teammatesHeard(input.presence)
-  const links = teamworkFacts(input.status)?.links ?? []
-  const others = (input.list?.members ?? []).filter((member) => !member.isSelf)
-  const online = others.filter((member) => isOnline(member.publicKey, heard, links)).length
-  return online + (input.list?.enrolled === true ? 1 : 0)
+/** Teammates online, never you: presence once heard, else connected links. The page head, the rail and the status bar all say it. */
+export function onlineCount(presence: TeammatePresence | undefined, status: TeamworkStatus | undefined): number {
+  const heard = teammatesHeard(presence)
+  if (heard !== undefined) return heard.teammates.filter((teammate) => teammate.connected).length
+  return (teamworkFacts(status)?.links ?? []).filter((link) => link.phase === 'connected').length
 }
 
 /** Presence first; a live link says so when no presence has been heard. */

@@ -1003,22 +1003,8 @@
   gap: var(--s1);
 }
 
-/* An asking pane's answers here lead with the first, as the page's one filled action per card. */
-.team-answers .answers__choice:first-child {
-  border-color: var(--accent);
-  background: var(--accent);
-  color: var(--on-accent);
-}
-
-.team-answers .answers__choice:first-child:hover:not(:disabled) {
-  border-color: var(--accent-hover);
-  background: var(--accent-hover);
-}
-
-.team-answers .answers__choice + .answers__choice {
-  border-color: transparent;
-  background: transparent;
-  color: var(--fg-secondary);
+.team-answers {
+  flex-wrap: nowrap;
 }
 
 /* Members: one card, a row per person divided by a quiet line. */

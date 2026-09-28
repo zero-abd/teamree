@@ -350,6 +350,27 @@ describe('teammates', () => {
     expect(openTeamwork).toHaveBeenCalledWith('p1')
   })
 
+  // The Teamwork page head and the rail give the same count.
+  it('counts a connected link before presence is heard', () => {
+    seed({
+      teammates: {},
+      teamwork: {
+        p1: {
+          state: 'read',
+          projectId: 'p1',
+          relay: { url: 'ws://127.0.0.1:1/v1/relay', source: 'repository' },
+          disabledReason: null,
+          origin: { ok: true, url: '/srv/pager.git' },
+          enrolled: true,
+          links: [{ publicKey: 'k1', handle: 'bo', phase: 'connected', since: 0, attempts: 1 }],
+          readAt: 1
+        }
+      }
+    })
+    mount()
+    expect(screen.getByText('1 teammate online')).toBeTruthy()
+  })
+
   it('says one in the singular, and nothing when none is online', () => {
     seed({ teammates: heard([true]) })
     const first = render(<StatusBar />)

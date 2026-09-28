@@ -81,6 +81,7 @@ export function AllowOpen({
   choices,
   onOpen,
   tabbable = true,
+  className = 'pane-item__answers',
   onChoose
 }: {
   terminalId: string
@@ -88,6 +89,7 @@ export function AllowOpen({
   choices: readonly ScreenChoice[]
   onOpen: () => void
   tabbable?: boolean
+  className?: string
   /** Instead of answering this machine's pane: a teammate's goes through their consent. */
   onChoose?: (choice: ScreenChoice) => void
 }): React.JSX.Element {
@@ -95,7 +97,7 @@ export function AllowOpen({
   const first = choices[0]
   const tabIndex = tabbable ? undefined : -1
   return (
-    <span className="answers pane-item__answers" role="group" aria-label="Answer">
+    <span className={`answers ${className}`} role="group" aria-label="Answer">
       {first === undefined ? null : (
         <Button
           variant="primary"

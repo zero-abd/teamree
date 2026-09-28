@@ -278,11 +278,7 @@ export function TeamworkView({ projectId }: { projectId: string }): React.JSX.El
       icon="team"
       title={project?.name ?? 'Teamwork'}
       lede={
-        project === undefined
-          ? undefined
-          : home
-            ? `Teamwork · ${onlineCount({ list, presence, status })} online`
-            : 'Teamwork'
+        project === undefined ? undefined : home ? `Teamwork · ${onlineCount(presence, status)} online` : 'Teamwork'
       }
       trailing={
         home ? (

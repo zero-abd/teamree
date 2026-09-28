@@ -240,7 +240,7 @@ describe('what is waiting on you', () => {
     expect(teamMemory.taken.get('h1')?.handoff.worktreeName).toBe('payment retry')
   })
 
-  it('offers a teammate’s asking agent’s answers, sent through their consent', () => {
+  it('offers Allow and Open on a teammate’s asking agent, sent through their consent', () => {
     const asking = cart({
       panes: [
         {
@@ -266,21 +266,22 @@ describe('what is waiting on you', () => {
     home()
     const waiting = within(region('Waiting on you'))
     expect(waiting.getByText('asking').closest('.status-pill')?.classList.contains('status--asking')).toBe(true)
-    fireEvent.click(waiting.getByRole('button', { name: 'Yes' }))
+    expect(waiting.queryByRole('button', { name: 'No' })).toBeNull()
+    fireEvent.click(waiting.getByRole('button', { name: 'Allow' }))
     expect(answerTeammatePane).toHaveBeenCalledWith(
       'p1',
       expect.objectContaining({ terminalId: 'peer:bo:t_1' }),
       expect.objectContaining({ label: 'Yes' })
     )
-    // The same answers sit on the member's row, beside the worktree that asks.
-    fireEvent.click(within(region('Members')).getByRole('button', { name: 'No' }))
-    expect(answerTeammatePane).toHaveBeenLastCalledWith(
-      'p1',
-      expect.objectContaining({ terminalId: 'peer:bo:t_1' }),
-      expect.objectContaining({ label: 'No' })
-    )
-    fireEvent.click(within(region('Members')).getByRole('button', { name: 'Open' }))
+    fireEvent.click(waiting.getByRole('button', { name: 'Open' }))
     expect(toggleWatchedPane).toHaveBeenCalledWith('p1', expect.objectContaining({ terminalId: 'peer:bo:t_1' }))
+    // The same two sit on the member's row, beside the worktree that asks.
+    const members = within(region('Members'))
+    expect(members.queryByRole('button', { name: 'No' })).toBeNull()
+    fireEvent.click(members.getByRole('button', { name: 'Allow' }))
+    expect(answerTeammatePane).toHaveBeenCalledTimes(2)
+    fireEvent.click(members.getByRole('button', { name: 'Open' }))
+    expect(toggleWatchedPane).toHaveBeenCalledTimes(2)
   })
 
   it('lists a review asked of you, opens it beside the workspace, and puts it off on Later', () => {

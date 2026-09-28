@@ -107,7 +107,9 @@ import {
   unfoldedRoot,
   withoutColumn
 } from '../panes/paneLayout'
-import { worktreeAfter, worktreeOrder } from '../sidebar/worktreeOrder'
+import { sortedByProject, worktreeAfter } from '../sidebar/worktreeOrder'
+import { worktreeTones } from '../sidebar/agentRows'
+import { useSidebarView } from './sidebarViewStore'
 import { worktreeDisplay, worktreeLabel } from '../sidebar/worktreeDisplay'
 import {
   isWatchedPaneId,
@@ -210,7 +212,7 @@ import {
 import { commitScope } from '../workspace/rightPanel/sourceControl'
 import { panelCost, panelYields, sidebarCost, type Sides } from '../workspace/roomForPanes'
 import { couldNotCheck } from '../updates/updateNotice'
-import { useMessageStore } from './messages'
+import { askingWorktrees, useMessageStore } from './messages'
 import { rowVisibility } from './rowVisibility'
 import type { SettingsSectionId } from '../settings/settingsModel'
 
@@ -3239,9 +3241,16 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     },
 
     stepWorktree(step) {
-      const { projects, worktrees, activeWorktreeId } = get()
+      const { projects, worktrees, terminals, activeWorktreeId } = get()
+      const { byAttention } = useSidebarView.getState()
+      const asking = askingWorktrees(useMessageStore.getState().messages)
+      const tones =
+        byAttention.length === 0 ? {} : worktreeTones(worktrees, Object.values(terminals), asking, Date.now())
       // The sidebar's order, not the store's: these chords move the highlight the sidebar draws.
-      const next = worktreeAfter(worktreeOrder(projects, worktrees), activeWorktreeId, step)
+      const order = sortedByProject(projects, worktrees, byAttention, (id) => tones[id] ?? null).flatMap(
+        (group) => group.rows
+      )
+      const next = worktreeAfter(order, activeWorktreeId, step)
       if (next && next.id !== activeWorktreeId) void get().openWorktree(next.id)
     },
 

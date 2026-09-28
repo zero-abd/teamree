@@ -1147,7 +1147,10 @@ describe('a query that finds nothing to run', () => {
   })
 
   it('adds nothing while a row would run, a file matched, or the files are still being searched', () => {
-    expect(shown(queryGroups(items(), 'login', []))).toEqual([['Worktrees', ['login fix']]])
+    expect(shown(queryGroups(items(), 'login', []))).toEqual([
+      ['Worktrees', ['login fix']],
+      ['Commands', ['New Task in login fix']]
+    ])
     expect(shown(queryGroups(items(), 'zzz', [fileItem('src/zzz.ts')]))).toEqual([['Files', ['zzz.ts']]])
     expect(shown(queryGroups(items(), 'zzz', null))).toEqual([])
   })
@@ -1180,7 +1183,7 @@ describe('a typed query, grouped', () => {
 
   it('heads each kind, the group holding the best match first, files after', () => {
     const groups = queryGroups(kinds, 'pay', [fileItem('src/pay/charge.ts')])
-    expect(titles(groups)).toEqual(['Worktrees', 'Files'])
+    expect(titles(groups)).toEqual(['Worktrees', 'Commands', 'Files'])
     expect(groups[0]?.items.map((item) => item.label)).toEqual(['payment retries', 'webhook payload'])
     const commands = queryGroups(kinds, 'copy', [])
     expect(titles(commands)).toEqual(['Commands'])
@@ -1411,5 +1414,61 @@ describe('Resume Stopped Agents', () => {
       hint: '2'
     })
     expect(row([ended('c'), ended('d', { restored: 'stopped', stoppedFor: 'no-conversation' })])).toBeUndefined()
+  })
+})
+
+describe('a file the query names', () => {
+  const items = buildPaletteItems(context({ worktrees: [worktree({ id: 'w1' })], activeWorktreeId: 'w1' }))
+  const first = (query: string, files: PaletteItem[]): PaletteItem | undefined =>
+    queryGroups(items, query, files)[0]?.items[0]
+
+  // "notes" is only one of New Markdown's hidden words.
+  it('outranks a command the query only matches loosely', () => {
+    expect(first('NOTES', [fileItem('NOTES.md')])?.label).toBe('NOTES.md')
+    expect(first('notes', [fileItem('docs/NOTES-2026.md')])?.label).toBe('NOTES-2026.md')
+  })
+
+  it('comes after a worktree the query names, and before the command it only matches loosely', () => {
+    const named = buildPaletteItems(context({ worktrees: [worktree({ id: 'w1', name: 'notes pass' })] }))
+    const groups = queryGroups(named, 'NOTES', [fileItem('NOTES.md')])
+    expect(groups.map((group) => [group.title, group.items[0]?.label])).toEqual([
+      ['Worktrees', 'notes pass'],
+      ['Files', 'NOTES.md'],
+      ['Commands', 'New Task in notes pass']
+    ])
+    expect(groups[2]?.items.map((item) => item.label)).toContain('New Markdown')
+  })
+
+  it('leaves a command whose name starts with the query first', () => {
+    expect(first('new markdown', [fileItem('new markdown.md')])?.label).toBe('New Markdown')
+    expect(first('notes', [fileItem('src/release-notes-draft.ts')])?.label).toBe('New Markdown')
+  })
+})
+
+describe('New Task in a worktree', () => {
+  const items = buildPaletteItems(
+    context({
+      worktrees: [
+        worktree({ id: 'w1', name: 'payment retries' }),
+        worktree({ id: 'w2', name: 'webhook payload' }),
+        worktree({ id: 'w3', name: 'gone', missing: true })
+      ],
+      activeWorktreeId: 'w1',
+      hintFor: (action) => (action === 'new-child-task' ? '⇧⌘N' : '')
+    })
+  )
+
+  it('is offered for each worktree with a checkout, the one on screen with its chord', () => {
+    const rows = items.filter((item) => item.id.startsWith('task-in:'))
+    expect(rows.map((item) => [item.id, item.label, item.hint])).toEqual([
+      ['task-in:w1', 'New Task in payment retries', '⇧⌘N'],
+      ['task-in:w2', 'New Task in webhook payload', '']
+    ])
+    expect(filterPalette(items, 'new task in webhook')[0]?.id).toBe('task-in:w2')
+  })
+
+  it('waits to be typed for', () => {
+    const listed = paletteGroups(items, [], 'payment retries').flatMap((group) => group.items)
+    expect(listed.some((item) => item.id.startsWith('task-in:'))).toBe(false)
   })
 })

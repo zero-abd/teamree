@@ -533,16 +533,14 @@ describe('the one line above the team when it cannot be reached', () => {
   })
 })
 
-describe('who is online, for the page head', () => {
-  it('counts you once on the roster and every teammate whose presence or link is live', () => {
-    expect(onlineCount({ list: roster(), presence: presence(), status: status([]) })).toBe(2)
-    // No presence heard yet: a connected link stands in.
-    const cyLinked = status([link(CY, 'cy', 'connected')])
-    expect(onlineCount({ list: roster(), presence: undefined, status: cyLinked })).toBe(2)
+describe('who is online, for the page head, the rail and the status bar', () => {
+  it('counts every teammate whose presence is live, never you', () => {
+    expect(onlineCount(presence(), status([]))).toBe(1)
+    expect(onlineCount(presence(), status([link(CY, 'cy', 'connected')]))).toBe(1)
   })
 
-  it('leaves you out before this machine is on the roster', () => {
-    expect(onlineCount({ list: { ...roster(), enrolled: false }, presence: presence(), status: undefined })).toBe(1)
-    expect(onlineCount({ list: undefined, presence: undefined, status: undefined })).toBe(0)
+  it('counts connected links before any presence is heard', () => {
+    expect(onlineCount(undefined, status([link(CY, 'cy', 'connected'), link(BO, 'bo', 'waiting')]))).toBe(1)
+    expect(onlineCount(undefined, undefined)).toBe(0)
   })
 })

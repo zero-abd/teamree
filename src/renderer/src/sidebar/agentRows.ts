@@ -2,7 +2,15 @@
 // PTY, not an agent's protocol: the readings are bytes arriving, how the process
 // ended, the title, the bell, and — outranking all of them — what the agent's hooks report.
 
-import type { AgentEvent, AgentKind, PaneWatcher, Subagent, Terminal } from '@shared/entities'
+import {
+  hasCheckout,
+  type AgentEvent,
+  type AgentKind,
+  type PaneWatcher,
+  type Subagent,
+  type Terminal,
+  type Worktree
+} from '@shared/entities'
 import { saysSomething } from '@shared/outputEvidence'
 import { activityOf, type AgentActivity, type PaneActivitySource } from '@shared/paneActivity'
 import { hookQuestion, isAnswerOrHint, type ScreenChoice } from '@shared/screenOpinion'
@@ -96,11 +104,13 @@ export function reportLine(report: NonNullable<WorktreeNameSource['report']>): s
 }
 
 /**
- * `shownActivity` read with its worktree's report: an agent at rest after a failed `done` is failed, restored or
- * not, until it works or asks again. Every surface that draws a pane's state reads it here.
+ * `shownActivity` read with its worktree's report: an agent at rest after its `done` is failed or ready, restored
+ * or not, until it works or asks again. Every surface that draws a pane's state reads it here.
  */
 export function paneActivity(pane: Terminal, report?: Pick<WorktreeReport, 'outcome'>): AgentActivity {
-  return reportFailed(pane, report) ? 'failed' : shownActivity(pane)
+  if (reportFailed(pane, report)) return 'failed'
+  const shown = shownActivity(pane)
+  return shown === 'stopped' && report?.outcome === 'succeeded' && atRestAgent(pane, shown) ? 'quiet' : shown
 }
 
 /** Whether a failed report outranks what the pane itself says. */
@@ -346,6 +356,21 @@ export function worktreeTone(rows: readonly AgentRow[]): DotTone | null {
   if (overall !== 'quiet') return overall === null ? null : dotTone(overall, undefined)
   if (rows.some((row) => row.activity === 'quiet' && row.agent !== undefined)) return 'quiet'
   return rows.some((row) => row.activity === 'stopped') ? 'stopped' : 'idle'
+}
+
+/** Each worktree's row dot: an ask sent to you outranks its panes; null for a worktree with no checkout. */
+export function worktreeTones(
+  worktrees: readonly Worktree[],
+  panes: readonly Terminal[],
+  asking: ReadonlySet<string>,
+  now: number
+): Record<string, DotTone | null> {
+  const byId: Record<string, DotTone | null> = {}
+  for (const worktree of worktrees) {
+    const tone = asking.has(worktree.id) ? 'waiting' : worktreeTone(agentRows(panes, worktree, now))
+    byId[worktree.id] = hasCheckout(worktree) ? tone : null
+  }
+  return byId
 }
 
 /**
