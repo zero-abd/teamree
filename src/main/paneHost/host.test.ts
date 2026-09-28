@@ -4,7 +4,8 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { createConnection } from 'node:net'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Layout } from '../../shared/entities'
 import { canSpawnPty } from '../terminals/pty-test-support'
 import { TerminalSessionManager, type ScrollbackRepository } from '../terminals/session-manager'
@@ -13,7 +14,7 @@ import type { RecordedScrollback } from '../terminals/scrollbackRecord'
 import { PaneHostClient, type RemotePty } from './client'
 import { startPaneHost, type PaneHost } from './host'
 import { PaneHosting } from './hosting'
-import { ensurePrivateDir, paneHostPaths, type PaneHostPaths } from './protocol'
+import { ensurePrivateDir, HOST_IDLE_MS, paneHostPaths, type PaneHostPaths } from './protocol'
 
 const describePty = canSpawnPty() && process.platform !== 'win32' ? describe : describe.skip
 
@@ -196,6 +197,26 @@ describePty('RemotePty over the pane host', () => {
     await client.detach()
     await until(() => closed, 'the idle exit')
     expect(() => statSync(paths.socket)).toThrow()
+  })
+
+  it('exits within its ten-minute idle rule once the app detaches, a silent connection or not', async () => {
+    const { paths } = await scratch()
+    let closed = false
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] })
+    cleanups.push(() => void vi.useRealTimers())
+    await host(paths, { onClosed: () => (closed = true) })
+    const client = await connect(paths)
+    await client.detach()
+    const silent = createConnection({ path: paths.socket })
+    cleanups.push(() => void silent.destroy())
+    await new Promise((resolve) => silent.once('connect', resolve))
+
+    vi.advanceTimersByTime(HOST_IDLE_MS - 1_000)
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(closed).toBe(false)
+    vi.advanceTimersByTime(31_000)
+    vi.useRealTimers()
+    await until(() => closed, 'the idle exit')
   })
 })
 

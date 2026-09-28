@@ -141,6 +141,8 @@ beforeEach(() => {
   seed()
   teamMemory.taken.clear()
   teamMemory.landedAt.clear()
+  teamMemory.startedAt.clear()
+  teamMemory.finishedAt.clear()
   useHandoffs.setState({ byProject: {} })
   useSharedNotes.setState({ inbox: [], bodies: {}, deleting: {}, expanded: null })
 })

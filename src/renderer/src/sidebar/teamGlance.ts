@@ -17,7 +17,7 @@ export type TeammateGlance = {
   working: number
   /** The first asking pane, for a cue to go to. */
   askingPaneId: string | undefined
-  worktrees: { id: string; name: string; tone: DotTone | null }[]
+  worktrees: { id: string; name: string; tone: DotTone | null; word: string | null }[]
 }
 
 export function teamGlance(
@@ -57,7 +57,7 @@ export function teamGlance(
         asking: asking.length,
         working: online ? panes.filter((pane) => pane.activity === 'working').length : 0,
         askingPaneId: asking[0]?.terminalId,
-        worktrees: theirs.map((row) => ({ id: row.id, name: row.name, tone: row.tone }))
+        worktrees: theirs.map((row) => ({ id: row.id, name: row.name, tone: row.tone, word: row.word }))
       }
     })
 }

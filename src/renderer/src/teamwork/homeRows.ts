@@ -10,8 +10,8 @@ import {
 } from '@shared/entities'
 import type { SharedNoteSummary } from '@shared/sharedNote'
 import type { PeerHandoff, TaskStage, TeamworkHandoffs } from '@shared/tasks'
-import { agoLabel, TONE_LABEL, type DotTone } from '../sidebar/agentRows'
-import { teammateRows, twinNames, type TeammatePaneRow } from '../sidebar/teammateRows'
+import { agoLabel, type DotTone } from '../sidebar/agentRows'
+import { teammateRows, teammateWord, twinNames, type TeammatePaneRow } from '../sidebar/teammateRows'
 import { worktreeDisplay } from '../sidebar/worktreeDisplay'
 import type { TeamMemory } from './teamMemory'
 
@@ -42,10 +42,8 @@ export type TeamMember = {
   worktrees: MemberWorktree[]
 }
 
-/** One of your own worktrees as the caller reads it from the panes; `stage` from its report, as a teammate's is. */
+/** One of your own worktrees as the caller reads it from the panes; `stage` from a landing or its report, as a teammate's is. */
 export type OwnWorktree = { id: string; name: string; tone: DotTone | null; stage?: TaskStage }
-
-const STAGE_WORD: Partial<Record<TaskStage, string>> = { landed: 'merged' }
 
 const PRESENCE_ORDER: Record<MemberPresence, number> = { you: 0, online: 1, away: 2, unseen: 3 }
 
@@ -70,7 +68,7 @@ export function teamMembers(input: {
         const worktrees = input.own
           .map(({ stage, ...worktree }) => ({
             ...worktree,
-            word: stageWord(stage, worktree.tone),
+            word: teammateWord(stage, worktree.tone),
             own: true
           }))
           .sort((a, b) => urgency(a) - urgency(b))
@@ -86,7 +84,7 @@ export function teamMembers(input: {
           id: row.id,
           name: row.name,
           ...(twins.has(row.name) && row.branch !== undefined ? { branch: row.branch } : {}),
-          word: stageWord(row.stage, row.tone),
+          word: row.word,
           tone: row.tone,
           ...(pickPane(row.panes) === undefined ? {} : { pane: pickPane(row.panes) }),
           own: false
@@ -123,11 +121,6 @@ function isOnline(
 ): boolean {
   const standing = heard?.teammates.find((entry) => entry.publicKey === publicKey)
   return standing?.connected ?? links.find((entry) => entry.publicKey === publicKey)?.phase === 'connected'
-}
-
-function stageWord(stage: TaskStage | undefined, tone: DotTone | null): string | null {
-  if (stage !== undefined) return STAGE_WORD[stage] ?? stage
-  return tone === null ? null : TONE_LABEL[tone]
 }
 
 /** Asking, then working, then the rest, merged last: what their agents are doing now comes first. */
@@ -196,7 +189,7 @@ export function teamActivity(input: {
   handoffs: TeamworkHandoffs | undefined
   notes: readonly SharedNoteSummary[]
   presence: TeammatePresence | undefined
-  memory: Pick<TeamMemory, 'landedAt' | 'taken'>
+  memory: Pick<TeamMemory, 'landedAt' | 'startedAt' | 'finishedAt' | 'taken'>
   projectId: string
 }): ActivityItem[] {
   const self = input.list?.self.handle ?? 'you'
@@ -252,16 +245,15 @@ export function teamActivity(input: {
     })
   }
   for (const worktree of teammatesHeard(input.presence)?.worktrees ?? []) {
-    const at = input.memory.landedAt.get(worktree.id)
-    if (at === undefined || worktree.stage !== 'landed') continue
     const name = worktreeDisplay(worktree).title
-    items.push({
-      key: `merged:${worktree.id}`,
-      handle: worktree.handle,
-      text: `${worktree.handle} merged ${name}`,
-      at,
-      day: false
-    })
+    const said = (kind: string, text: string, at: number | undefined): void => {
+      if (at !== undefined) items.push({ key: `${kind}:${worktree.id}`, handle: worktree.handle, text, at, day: false })
+    }
+    said('started', `${worktree.handle} started ${name}`, input.memory.startedAt.get(worktree.id))
+    const finished = input.memory.finishedAt.get(worktree.id)
+    said('finished', `${worktree.handle} ${finished?.failed === true ? 'failed' : 'finished'} ${name}`, finished?.at)
+    if (worktree.stage === 'landed')
+      said('merged', `${worktree.handle} merged ${name}`, input.memory.landedAt.get(worktree.id))
   }
   return items.sort((a, b) => b.at - a.at).slice(0, MAX_ACTIVITY)
 }

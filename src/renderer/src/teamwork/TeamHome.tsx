@@ -2,6 +2,7 @@
 // shared notes, then activity and the project beside them. Every row leads to the thing it names.
 
 import { useEffect, useMemo, useState } from 'react'
+import { landedWhereItLands } from '../dashboard/taskRows'
 import { Icon } from '../icons/Icon'
 import { watchedPaneId } from '../panes/watchedPanes'
 import { AnswerButtons } from '../sidebar/AnswerButtons'
@@ -66,6 +67,7 @@ export function TeamHome({ projectId }: { projectId: string }): React.JSX.Elemen
   const project = useWorkspaceStore((state) => state.projects.find((entry) => entry.id === projectId))
   const worktrees = useWorkspaceStore((state) => state.worktrees)
   const terminals = useWorkspaceStore((state) => state.terminals)
+  const landings = useWorkspaceStore((state) => state.landings)
   const handoffs = useHandoffs((state) => state.byProject[projectId])
   const inbox = useSharedNotes((state) => state.inbox)
   const deleting = useSharedNotes((state) => state.deleting)
@@ -80,16 +82,28 @@ export function TeamHome({ projectId }: { projectId: string }): React.JSX.Elemen
     const panes = Object.values(terminals)
     return worktrees
       .filter((worktree) => worktree.projectId === projectId)
-      .map((worktree) => ({
-        id: worktree.id,
-        name: worktreeDisplay(worktree).title,
-        tone: worktreeTone(agentRows(panes, worktree.id, now).filter((row) => row.agent !== undefined)),
-        ...(worktree.report === undefined
-          ? {}
-          : { stage: worktree.report.outcome === 'failed' ? ('failed' as const) : ('done' as const) })
-      }))
+      .map((worktree) => {
+        const tone = worktreeTone(agentRows(panes, worktree.id, now).filter((row) => row.agent !== undefined))
+        // As the sidebar's `taskStage`: an agent working or asking outranks a landing, which outranks a report.
+        const stage =
+          tone === 'working' || tone === 'waiting'
+            ? undefined
+            : landedWhereItLands(worktree, landings[worktree.id])
+              ? ('landed' as const)
+              : worktree.report === undefined
+                ? undefined
+                : worktree.report.outcome === 'failed'
+                  ? ('failed' as const)
+                  : ('done' as const)
+        return {
+          id: worktree.id,
+          name: worktreeDisplay(worktree).title,
+          tone,
+          ...(stage === undefined ? {} : { stage })
+        }
+      })
       .filter((worktree) => worktree.tone !== null)
-  }, [now, projectId, terminals, worktrees])
+  }, [landings, now, projectId, terminals, worktrees])
 
   const members = teamMembers({ list, presence, status, own, memory: teamMemory, now })
   const waiting = waitingOnYou({ handoffs, presence, now })

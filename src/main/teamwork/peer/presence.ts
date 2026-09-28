@@ -107,13 +107,12 @@ function withTaskDetails(
   return extended
 }
 
-/** 128's words from what this machine sees: a report, the panes, then git. */
+/** In the owner's own order (`taskStage`): the panes, then a landing, then a report, then git. */
 function stageOf(
   worktree: Worktree,
   terminals: readonly Terminal[],
   details: TaskGitDetails | undefined
 ): TaskStage | undefined {
-  if (worktree.report !== undefined) return worktree.report.outcome === 'failed' ? 'failed' : 'done'
   if (worktree.state === 'failed') return 'failed'
   const agents = terminals.filter((terminal) => terminal.running && (terminal.agent ?? terminal.foregroundAgent))
   const asking = (terminal: Terminal): boolean =>
@@ -121,6 +120,7 @@ function stageOf(
   if (agents.some(asking)) return 'asking'
   if (terminals.some((terminal) => activityOf(terminal) === 'working')) return 'working'
   if (details?.merged === true) return 'landed'
+  if (worktree.report !== undefined) return worktree.report.outcome === 'failed' ? 'failed' : 'done'
   if (details !== undefined && details.clean && details.ahead > 0) return 'ready'
   // A live agent at its prompt is no stage; its panes' `activity` says what it is.
   return undefined

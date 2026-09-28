@@ -61,6 +61,7 @@ export async function startPaneHost(options: PaneHostOptions): Promise<PaneHost>
   const log = options.log ?? (() => {})
   const sessions = new Map<string, Session>()
   let client: Socket | undefined
+  const sockets = new Set<Socket>()
   const attached = new Set<string>()
   let paused = false
   let busyAt = Date.now()
@@ -255,8 +256,10 @@ export async function startPaneHost(options: PaneHostOptions): Promise<PaneHost>
 
   const server: Server = createServer((socket) => {
     let trusted = false
+    sockets.add(socket)
     socket.on('error', () => {})
     socket.on('close', () => {
+      sockets.delete(socket)
       if (client !== socket) return
       client = undefined
       attached.clear()
@@ -311,7 +314,8 @@ export async function startPaneHost(options: PaneHostOptions): Promise<PaneHost>
     if (closed) return
     closed = true
     clearInterval(idle)
-    client?.destroy()
+    // Every connection, not just the app's: `server.close` waits for a silent one forever.
+    for (const socket of sockets) socket.destroy()
     for (const session of [...sessions.values()]) {
       if (session.exited === undefined) signalGroup(session.pty, 'SIGKILL')
       forget(session)
