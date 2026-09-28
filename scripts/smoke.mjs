@@ -16,8 +16,11 @@ import {
   projectHeadCollisions,
   restoreProjectHead,
   setSidebarWidth,
+  settingsSearchCollisions,
+  SETTINGS_WIDTHS_CHECKED,
   SIDEBAR_WIDTHS_CHECKED,
   stageProjectHead,
+  typeSettingsQuery,
   worktreeRowIsOpen
 } from './smoke-probes.mjs'
 
@@ -149,6 +152,7 @@ async function run() {
 
   await checkContrast(ask, 'first launch')
   await checkWindowSurfaces(ask)
+  await checkSettingsSearch(window, ask)
   await checkMenuBar(ask)
   await checkWorktreeSurfaces(ask)
   await checkProjectHead(ask)
@@ -415,6 +419,33 @@ async function checkMenuBar(ask) {
     named('All Panes')?.click()
     await waitFor(async () => !(await showsDashboard()), 'choosing the same menu item again did not put the view away')
   }
+}
+
+/** Settings filtered at each width, the icon rail's included: the open search is drawn over nothing (#521). */
+async function checkSettingsSearch(window, ask) {
+  await ask(`document.querySelector('.sidebar__settings')?.click()`)
+  if (!(await waitFor(() => ask(typeSettingsQuery('keep')), 'Settings search never took a query'))) return
+  // Emulated, since the window's minimum width is wider than the rail's range.
+  const cdp = window.webContents.debugger
+  cdp.attach('1.3')
+  for (const width of SETTINGS_WIDTHS_CHECKED) {
+    await cdp.sendCommand('Emulation.setDeviceMetricsOverride', {
+      width,
+      height: 700,
+      deviceScaleFactor: 1,
+      mobile: false
+    })
+    if (!(await waitFor(() => ask(`innerWidth === ${width}`), `the window never became ${width}px wide`))) continue
+    for (const collision of JSON.parse(await ask(settingsSearchCollisions()))) {
+      failures.push(`Settings at ${width}px: ${collision}`)
+    }
+  }
+  await cdp.sendCommand('Emulation.clearDeviceMetricsOverride')
+  cdp.detach()
+  await ask(typeSettingsQuery(''))
+  await ask(`document.querySelector('.page__close')?.click()`)
+  await waitFor(() => ask(`!document.querySelector('.page__close')`), 'closing Settings left it on screen')
+  console.log(`smoke: Settings search measured at ${SETTINGS_WIDTHS_CHECKED.join(', ')}px`)
 }
 
 /** A long name, a long base ref and a team at the narrowest and the default sidebar: nothing drawn over anything (#488). */

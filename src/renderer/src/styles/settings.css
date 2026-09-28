@@ -1210,7 +1210,8 @@
 
 /* Narrow ------------------------------------------------------------------ */
 
-/* The section list keeps its icons; the search opens over the list when it has the focus or a filter. */
+/* The section list keeps its icons. With the focus or a filter, the search opens in its own row across the top
+   and the page head steps down below it. */
 @media (max-width: 900px) {
   .settings-side {
     width: 56px;
@@ -1259,13 +1260,30 @@
     flex: 0 0 0;
   }
 
+  .page--side {
+    position: relative;
+  }
+
   .settings-search:focus-within,
   .settings-search:has(.settings-search__input:not(:placeholder-shown)) {
-    position: relative;
+    position: absolute;
     z-index: 2;
-    width: 220px;
+    top: calc(var(--titlebar-h, 38px) + var(--s1) + var(--s3));
+    right: var(--s5);
+    left: var(--s2);
     justify-content: flex-start;
     padding: 0 var(--s2);
+    /* It lies over the head, whose drag region would otherwise take its clicks. */
+    -webkit-app-region: no-drag;
+  }
+
+  .settings-search:focus-within + .settings-nav,
+  .settings-search:has(.settings-search__input:not(:placeholder-shown)) + .settings-nav {
+    margin-top: calc(var(--control-h) + var(--s3));
+  }
+
+  .page--side:has(.settings-search:focus-within, .settings-search__input:not(:placeholder-shown)) .page__head {
+    padding-top: calc(var(--titlebar-h, 38px) + var(--s1) + var(--s3) + var(--control-h) + var(--s4));
   }
 
   .settings-search:focus-within .settings-search__input,

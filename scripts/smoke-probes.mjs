@@ -134,3 +134,43 @@ export function projectHeadCollisions() {
     return JSON.stringify(found)
   })()`
 }
+
+/** The widths Settings is measured at, all on the icon rail: from its widest down to a phone's. */
+export const SETTINGS_WIDTHS_CHECKED = [900, 760, 560, 420]
+
+/** Types `query` into Settings' search as a person would, so React sees it. */
+export function typeSettingsQuery(query) {
+  return `(() => {
+    const input = document.querySelector('.settings-search__input')
+    if (!input) return false
+    input.focus()
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, ${JSON.stringify(query)})
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+    return input.value === ${JSON.stringify(query)}
+  })()`
+}
+
+/** What Settings' search is drawn over, squeezed to or pushed past, as sentences; `[]` when nothing is. */
+export function settingsSearchCollisions() {
+  return `(() => {
+    const search = document.querySelector('.settings-search')
+    const page = document.querySelector('.page--side')
+    if (!search || !page) return JSON.stringify(['Settings is not on screen'])
+    const box = search.getBoundingClientRect()
+    const meets = (a, b) => a.left < b.right - 0.5 && b.left < a.right - 0.5 && a.top < b.bottom - 0.5 && b.top < a.bottom - 0.5
+    const found = []
+    const parts = page.querySelectorAll('.page__tile, .page__title, .page__lede, .page__trailing, .page__close, .settings-nav__item')
+    for (const part of parts) {
+      const other = part.getBoundingClientRect()
+      if (other.width > 0.5 && other.height > 0.5 && meets(box, other)) {
+        found.push('the search is over ' + (part.getAttribute('aria-label') ?? (part.textContent.trim() || part.className)))
+      }
+    }
+    const input = search.querySelector('.settings-search__input')
+    const open = input.value !== '' || document.activeElement === input
+    const room = input.getBoundingClientRect().width
+    if (open && room < 120) found.push('the search is squeezed to ' + Math.round(room) + 'px')
+    if (box.right > page.getBoundingClientRect().right + 0.5) found.push('the search runs past the page')
+    return JSON.stringify(found)
+  })()`
+}
