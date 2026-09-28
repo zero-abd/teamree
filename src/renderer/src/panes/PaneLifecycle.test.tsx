@@ -276,7 +276,8 @@ describe('a live agent', () => {
     const card = screen.getByRole('group', { name: 'Permission needed' })
     expect(card.className).toContain('pane-state--asking')
     expect(within(card).getByRole('button', { name: 'Review' })).toBeTruthy()
-    expect(document.querySelector('.pane-foot')?.textContent).toContain('Asking')
+    // The card says what it asks; the foot only names the state, so the ask is not said twice.
+    expect(document.querySelector('.pane-foot')?.textContent).toBe('Asking')
   })
 
   it('draws no footer for a plain shell', () => {

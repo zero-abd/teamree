@@ -144,7 +144,8 @@ export function PaneFoot({
   // At rest, the report says what was done, never the `msg done` call on screen; a failed one reads failed.
   const shown = stage === 'ready' && paneActivity(terminal, report) === 'failed' ? 'failed' : stage
   const summary = stage === 'ready' && report !== undefined ? (report.summary.trim().split('\n')[0] ?? null) : null
-  const said = stage === 'asking' ? askFor(terminal, line) : (summary ?? line)
+  // Asking, the card above says what; the foot names the state alone.
+  const said = stage === 'asking' ? null : (summary ?? line)
   const parts = [FOOT_WORD[shown], said, stage === 'working' ? elapsedLabel(age) : null].filter(
     (part): part is string => part !== null && part !== ''
   )
