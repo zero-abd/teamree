@@ -180,10 +180,9 @@ describe('a commit a hook refused', () => {
     call.mockImplementation(() => Promise.resolve(undefined))
     const notice = screen.getByText('Commit blocked · pre-commit · fix typo docs').closest<HTMLElement>('.notice')!
 
-    await act(async () => {
-      fireEvent.click(within(notice).getByRole('button', { name: 'Send to Agent' }))
-      await new Promise((resolve) => setTimeout(resolve, 100))
-    })
+    fireEvent.click(within(notice).getByRole('button', { name: 'Send to Agent' }))
+    // The notice's way out was taken, once the Return that follows the paste was typed too.
+    await waitFor(() => expect(useWorkspaceStore.getState().notices.filter((notice) => notice.commitBlock)).toEqual([]))
 
     const writes = call.mock.calls.filter(([method]) => method === 'terminal.write').map(([, params]) => params)
     expect(writes).toHaveLength(2)
@@ -193,8 +192,7 @@ describe('a commit a hook refused', () => {
     expect(pasted).toContain('src/b.ts:4:2 error no-undef')
     expect(pasted).toContain('Fix it and commit again.')
     expect(writes[1]).toEqual({ terminalId: 't1', data: '\r' })
-    // The notice's way out was taken; the lines stay by the commit box until the next attempt.
-    await waitFor(() => expect(useWorkspaceStore.getState().notices.filter((notice) => notice.commitBlock)).toEqual([]))
+    // The lines stay by the commit box until the next attempt.
     expect(document.querySelector('.changes__blocked')).toBeTruthy()
   })
 

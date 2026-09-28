@@ -174,7 +174,13 @@ describe('the / menu', () => {
 })
 
 describe('taking the focus', () => {
-  const frames = () => act(() => new Promise((resolve) => setTimeout(resolve, 100)))
+  // Two frames, not a wall-clock wait: the page focuses a frame late, and a loaded machine stretches frames.
+  const frame = () => new Promise((resolve) => requestAnimationFrame(resolve))
+  const frames = () =>
+    act(async () => {
+      await frame()
+      await frame()
+    })
   const pane = (focused: boolean, onFocus: () => void) => (
     <MarkdownPane
       paneId="md:1"
@@ -201,6 +207,13 @@ describe('taking the focus', () => {
       document.dispatchEvent(new Event('selectionchange'))
     })
   }
+  // A caret moved in a page that already has the focus, reported at once.
+  const moveCaret = (text: Text, offset: number): void =>
+    act(() => {
+      getSelection()!.collapse(text, offset)
+      document.dispatchEvent(new Event('selectionchange'))
+    })
+  const focused = (editor: Editor) => waitFor(() => expect(document.activeElement).toBe(editor.view.dom))
 
   afterEach(() => {
     window.removeEventListener('selectionchange', held, true)
@@ -226,16 +239,14 @@ describe('taking the focus', () => {
   it('puts the caret back where it was when the pane gets the focus again', async () => {
     const view = render(pane(true, () => {}))
     const editor = await page()
-    await frames()
+    await focused(editor)
     const text = literal()
-    placeCaret(text, 8, editor)
-    await frames()
+    moveCaret(text, 8)
     const at = editor.state.selection.from
     view.rerender(pane(false, () => {}))
     act(() => editor.view.dom.blur())
     view.rerender(pane(true, () => {}))
-    await frames()
-    expect(document.activeElement).toBe(editor.view.dom)
+    await focused(editor)
     expect(editor.state.selection.from).toBe(at)
     expect(getSelection()!.anchorNode).toBe(text)
     expect(getSelection()!.anchorOffset).toBe(8)

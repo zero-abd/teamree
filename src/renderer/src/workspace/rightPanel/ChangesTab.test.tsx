@@ -2113,10 +2113,9 @@ describe('the pull request’s checks', () => {
     )
     render(<ChangesTab />)
 
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: 'Send Failure to Agent' }))
-      await new Promise((resolve) => setTimeout(resolve, 100))
-    })
+    fireEvent.click(screen.getByRole('button', { name: 'Send Failure to Agent' }))
+    // Back from Reading Logs… once the Return that follows the paste has been typed too.
+    await screen.findByRole('button', { name: 'Send Failure to Agent' })
 
     expect(call).toHaveBeenCalledWith('worktree.checkFailure', { worktreeId: 'w1', name: 'test' })
     const writes = call.mock.calls.filter(([method]) => method === 'terminal.write')

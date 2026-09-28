@@ -3,7 +3,7 @@
 // The first-run setup line through the in-memory runtime, and the full rows from Help: what was found,
 // the default agent kept.
 
-import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('../runtimeClient/currentRuntimeClient', async () => {
@@ -59,8 +59,8 @@ describe('the welcome’s setup line', () => {
     expect(await within(line).findByText('Claude Code')).toBeTruthy()
     expect(within(line).getByText('Codex')).toBeTruthy()
     expect(within(line).getByText('Notifications')).toBeTruthy()
-    // The seeded CLI is not on PATH: that one is a row, with its button.
-    expect(await within(row('cli')).findByRole('button', { name: 'Install…' })).toBeTruthy()
+    // The seeded CLI is not on PATH: that one is a row, with its button. Its answer may land after the agents'.
+    expect(await within(await waitFor(() => row('cli'))).findByRole('button', { name: 'Install…' })).toBeTruthy()
     expect(document.querySelector('[data-setup="agents"]')).toBeNull()
     expect(document.querySelector('[data-setup="notifications"]')).toBeNull()
     expect(document.querySelector('[data-setup="project"]')).toBeNull()
