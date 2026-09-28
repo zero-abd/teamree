@@ -285,6 +285,9 @@ describe('dispatcher', () => {
       'update.restart',
       'update.setAutomatic',
       'update.state',
+      // Local: this machine's own workspace file.
+      'workspace.problems',
+      'workspace.retrySave',
       'workspace.subscribe',
       // Local: rewrites this machine's branch, as a commit does.
       'worktree.abortUpdate',

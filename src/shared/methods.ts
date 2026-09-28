@@ -20,6 +20,7 @@ import type {
   MemberList,
   PaneConsent,
   PaneHostStatus,
+  WorkspaceFileProblem,
   PaneNode,
   PaneWatchers,
   PeerPresence,
@@ -943,6 +944,9 @@ export const Params = {
   systemKill: z.object({ pid: z.number().int().positive() }),
 
   workspaceSubscribe: z.object({}),
+  workspaceProblems: z.object({}),
+  /** Writes the workspace now rather than at the next retry. */
+  workspaceRetrySave: z.object({}),
 
   unsubscribe: z.object({ subscription: z.string().min(1) }),
 
@@ -1192,6 +1196,8 @@ export type MethodContract = TaskMethodContract &
     'system.kill': { params: z.infer<typeof Params.systemKill>; result: ProcessKill }
 
     'workspace.subscribe': { params: z.infer<typeof Params.workspaceSubscribe>; result: { subscription: string } }
+    'workspace.problems': { params: z.infer<typeof Params.workspaceProblems>; result: WorkspaceFileProblem[] }
+    'workspace.retrySave': { params: z.infer<typeof Params.workspaceRetrySave>; result: { saved: boolean } }
 
     unsubscribe: { params: z.infer<typeof Params.unsubscribe>; result: { unsubscribed: true } }
   }
@@ -1227,6 +1233,8 @@ export type WorkspaceEvent =
   | { type: 'updates' }
   | { type: 'layout'; worktreeId: string }
   | { type: 'terminalExited'; terminalId: string; exitCode: number }
+  /** What `workspace.problems` answers changed. */
+  | { type: 'workspaceFile' }
   | TaskWorkspaceEvent
 
 /** Events pushed on a terminal.subscribe subscription. */

@@ -11,7 +11,7 @@ import type { Appearance, Tone } from '../../shared/theme'
 import { ScrollbackArchive, SCROLLBACK_DIR_NAME } from '../store/scrollbackArchive'
 import { PaneHosting } from '../paneHost/hosting'
 import type { SelfInstall } from '../updates'
-import { WorkspaceStore } from '../store/workspaceStore'
+import { describeStoreProblem, WorkspaceStore } from '../store/workspaceStore'
 import { createDispatcher, type Dispatcher } from './dispatcher'
 import { discoveryFilePath, removeDiscoveryFile, writeDiscoveryFile } from './discoveryFile'
 import { registerHandlers } from './handlers/registerHandlers'
@@ -22,6 +22,7 @@ import { createRuntimeContext, type RuntimeContext } from './runtimeContext'
 import { resolveEndpoint } from './socketEndpoint'
 import { startSocketServer, type RuntimeSocketServer } from './socketServer'
 import { SubscriptionHub } from './subscriptionHub'
+import { WorkspaceEventBus } from './workspaceEvents'
 
 export const WORKSPACE_FILE_NAME = 'workspace.json'
 
@@ -140,7 +141,14 @@ export async function startRuntime(options: RuntimeOptions): Promise<Runtime> {
   } = options
   const report = onError ?? ((error: unknown) => console.error('[runtime]', error))
 
-  const store = await WorkspaceStore.open(join(userDataDir, WORKSPACE_FILE_NAME))
+  // Made before the store, so what the store finds wrong with its file reaches the window.
+  const workspaceEvents = new WorkspaceEventBus()
+  const store = await WorkspaceStore.open(join(userDataDir, WORKSPACE_FILE_NAME), {
+    onProblem: (problem) => {
+      console.error('[workspace]', describeStoreProblem(problem))
+      workspaceEvents.emit({ type: 'workspaceFile' })
+    }
+  })
   // After the store, because the sweep needs to know which panes still exist. A
   // workspace file this launch could not read answers nothing rather than "no
   // panes": its panes are coming back and their output has to still be there.
@@ -149,7 +157,7 @@ export async function startRuntime(options: RuntimeOptions): Promise<Runtime> {
     store.unreadable === undefined ? store.listTerminals().map((record) => record.id) : undefined
   )
   const subscriptions = new SubscriptionHub()
-  const context = createRuntimeContext({ version, store, subscriptions })
+  const context = createRuntimeContext({ version, store, subscriptions, workspaceEvents })
   const registry = new MethodRegistry(context)
   const endpoint = serveCli ? resolveEndpoint(userDataDir) : undefined
   const paneHost = new PaneHosting({
@@ -222,7 +230,8 @@ export async function startRuntime(options: RuntimeOptions): Promise<Runtime> {
           release: () => (wroteDiscovery ? removeDiscoveryFile(discoveryPath) : undefined)
         },
         // Again: the teardown itself changes the workspace.
-        { name: 'the workspace file', release: () => store.flush() }
+        { name: 'the workspace file', release: () => store.flush() },
+        { name: 'the save retry', release: () => store.close() }
       ],
       { graceMs: RELEASE_GRACE_MS, onProblem: report }
     )

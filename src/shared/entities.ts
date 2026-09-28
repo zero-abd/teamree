@@ -819,6 +819,15 @@ export type SystemResources = {
 /** The pane host (Keep Agents Running): `panes` live in it; `inProcess` end with the app; `shells` could move. */
 export type PaneHostStatus = { running: boolean; pid?: number; panes: number; inProcess: number; shells: number }
 
+/** What is wrong with `workspace.json`, shown until it is fixed or dismissed. `keptAt`: where the unreadable bytes went. */
+export type WorkspaceFileProblem =
+  /** Unreadable; the last good copy was loaded instead. */
+  | { kind: 'restored'; filePath: string; keptAt: string }
+  /** Neither it nor its backup could be read, so this launch started empty. No `keptAt`: left in place, not saved over. */
+  | { kind: 'unreadable'; filePath: string; keptAt?: string }
+  /** Saves are failing and are retried until one lands. */
+  | { kind: 'saveFailed'; filePath: string; reason: string; diskFull: boolean }
+
 /** What `system.kill` did: the signal went to one process, or to its whole group. */
 export type ProcessKill = {
   signalled: true

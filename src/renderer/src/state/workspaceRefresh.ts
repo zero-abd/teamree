@@ -100,6 +100,7 @@ export function targetsForEvent(event: WorkspaceEvent): RefreshTargets {
       return refreshTargets({ exits: [{ terminalId: event.terminalId, exitCode: event.exitCode }] })
     // Read by surfaces that do not exist yet; each branch that adds one maps its event here.
     case 'messages':
+    case 'workspaceFile':
     case 'settings':
     case 'addons':
     case 'templates':

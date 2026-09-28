@@ -1683,6 +1683,8 @@ export function createSeededRuntimeClient(): RuntimeClient {
     'addons.install': notInDemo('addons.install'),
 
     'workspace.subscribe': () => ({ subscription: nextId('sub') }),
+    'workspace.problems': () => [],
+    'workspace.retrySave': () => ({ saved: true }),
     'worktree.search': () => ({ subscription: nextId('sub') }),
 
     unsubscribe: () => ({ unsubscribed: true })

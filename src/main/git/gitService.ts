@@ -364,7 +364,35 @@ export class GitService {
     this.#projectFiles.set(project.id, await readCheckout(this.#runner, project.path))
     const presented = this.#present(project)
     this.events.emit({ type: 'project.added', project: presented })
+    await this.#adoptCheckouts(project)
     return presented
+  }
+
+  /** Checkouts git lists in this app's worktree folders that no record names come back as ready tasks. */
+  async #adoptCheckouts(project: Project): Promise<void> {
+    const inventory = await readWorktreeInventory(this.#runner, project.path).catch(() => [])
+    const prefix = this.#branchPrefix(project)
+    // The first entry is the primary checkout.
+    for (const entry of inventory.slice(1)) {
+      const branch = entry.branch
+      if (branch === undefined || entry.bare || !this.#madeHere(project, entry.path)) continue
+      if (this.#store.listWorktrees().some((worktree) => samePath(worktree.path, entry.path))) continue
+      if (!(await isDirectory(entry.path))) continue
+      const slug = branch.startsWith(prefix) ? branch.slice(prefix.length) : branch
+      const worktree: Worktree = {
+        id: this.#createId(),
+        projectId: project.id,
+        name: slug.replaceAll('-', ' '),
+        branch,
+        path: entry.path,
+        startedFrom: project.baseRef,
+        state: 'ready',
+        createdAt: this.#now()
+      }
+      worktree.startedFrom = await this.#forkPoint(project, worktree)
+      this.#store.putWorktree(worktree)
+      this.events.emit({ type: 'worktree.created', worktree })
+    }
   }
 
   /** Clones, then adds the checkout. Failures are one line each; see `cloneFailureLine`. */

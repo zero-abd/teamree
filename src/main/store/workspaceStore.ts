@@ -1,10 +1,12 @@
 // Durable workspace state: the projects a user tracks, the worktrees under them,
 // and the pane layout per worktree. State is held in memory and mirrored to one
 // JSON file; reads are synchronous because handlers answer from memory, and
-// writes are coalesced so a burst of mutations costs one rename.
+// writes are coalesced so a burst of mutations costs one write. Each write is
+// copied to `.bak`, which is loaded when the file cannot be read.
 
-import { rename } from 'node:fs/promises'
-import type { Layout, Project, Worktree } from '../../shared/entities'
+import { constants } from 'node:fs'
+import { copyFile, rename, rm } from 'node:fs/promises'
+import type { Layout, Project, Worktree, WorkspaceFileProblem } from '../../shared/entities'
 import type { ClosedTerminalRecord, TerminalRecord } from '../terminals/session-restore'
 import { samePath } from '../git/pathIdentity'
 import { openJsonFile, writeJsonFileAtomically } from './atomicJsonFile'
@@ -59,14 +61,15 @@ export type StoreProblem =
   | { kind: 'notWritten'; filePath: string; reason: string }
   /** Nothing has been saved since; this session's work is in memory only. */
   | { kind: 'writeFailed'; filePath: string; reason: string }
+  /** The file could not be read and the backup was loaded in its place. */
+  | { kind: 'restored'; filePath: string; backupPath: string }
+  /** A write landed after `writeFailed`. */
+  | { kind: 'saved'; filePath: string }
 
 export function describeStoreProblem(problem: StoreProblem): string {
   switch (problem.kind) {
     case 'unreadable':
-      return (
-        `${problem.filePath} could not be read (${problem.reason}), so this window opened with nothing in it. ` +
-        'Your projects and worktrees are still on disk; the file is kept until something needs to be saved.'
-      )
+      return `${problem.filePath} could not be read (${problem.reason}).`
     case 'keptAside':
       return `${problem.filePath} could not be read and was kept at ${problem.keptAt} before a new one was written.`
     case 'notWritten':
@@ -76,15 +79,24 @@ export function describeStoreProblem(problem: StoreProblem): string {
       )
     case 'writeFailed':
       return `${problem.filePath} could not be written (${problem.reason}); nothing has been saved since.`
+    case 'restored':
+      return `${problem.filePath} could not be read; loaded ${problem.backupPath} instead.`
+    case 'saved':
+      return `${problem.filePath} was written again.`
   }
 }
 
 const CLOSED_KEPT_MS = 14 * 24 * 60 * 60_000
+const SAVE_RETRY_MS = 5_000
+
+const BACKUP_SUFFIX = '.bak'
 
 export type WorkspaceStoreOptions = {
   /** Defaults to reporting; never to silence. */
   onProblem?: (problem: StoreProblem) => void
   now?: () => number
+  /** How soon a failed write is tried again. */
+  retryMs?: number
 }
 
 export class WorkspaceStore {
@@ -106,11 +118,18 @@ export class WorkspaceStore {
   private queue: Promise<void> = Promise.resolve()
   private queued = false
   private writeError: unknown
-  private reportedWriteFailure = false
+  private saveFailure: { reason: string; diskFull: boolean } | undefined
+  private retryTimer: ReturnType<typeof setTimeout> | undefined
   private readonly onProblem: (problem: StoreProblem) => void
   private readonly now: () => number
-  /** Set while the file on disk is one this process has refused to overwrite. */
+  private readonly retryMs: number
+  /** Why the file could not be read at open, for the whole session. */
   private unreadableReason: string | undefined
+  /** Set while the unreadable file is still in place, so nothing may write over it. */
+  private unreadablePending = false
+  private keptAt: string | undefined
+  private saidNotWritten = false
+  private loadProblem: WorkspaceFileProblem | undefined
 
   private constructor(
     readonly filePath: string,
@@ -119,6 +138,7 @@ export class WorkspaceStore {
   ) {
     this.onProblem = options.onProblem ?? ((problem) => console.error('[workspace]', describeStoreProblem(problem)))
     this.now = options.now ?? Date.now
+    this.retryMs = options.retryMs ?? SAVE_RETRY_MS
     for (const project of document.projects) this.projects.set(project.id, project)
     for (const worktree of document.worktrees) this.worktrees.set(worktree.id, worktree)
     for (const layout of document.layouts) this.layouts.set(layout.worktreeId, layout)
@@ -157,23 +177,56 @@ export class WorkspaceStore {
   }
 
   /**
-   * Opens the file, or starts empty. An unreadable file still opens the store,
-   * but nothing writes over those bytes until they are kept aside.
+   * Opens the file, its backup when the file cannot be read, or starts empty.
+   * An unreadable file is moved aside before anything is written in its place.
    */
   static async open(filePath: string, options: WorkspaceStoreOptions = {}): Promise<WorkspaceStore> {
     const read = await openJsonFile(filePath)
-    const document = read.kind === 'parsed' ? parseWorkspaceDocument(read.value) : emptyWorkspaceDocument()
+    const backupPath = filePath + BACKUP_SUFFIX
+    const backup = read.kind === 'unreadable' ? await openJsonFile(backupPath) : undefined
+    const loaded = read.kind === 'parsed' ? read : backup?.kind === 'parsed' ? backup : undefined
+    const document = loaded === undefined ? emptyWorkspaceDocument() : parseWorkspaceDocument(loaded.value)
     const store = new WorkspaceStore(filePath, document, options)
-    if (read.kind === 'unreadable') {
-      store.unreadableReason = read.reason
-      store.onProblem({ kind: 'unreadable', filePath, reason: read.reason })
+    if (read.kind !== 'unreadable') return store
+    store.unreadableReason = read.reason
+    store.unreadablePending = true
+    store.onProblem({ kind: 'unreadable', filePath, reason: read.reason })
+    // A write the constructor queued may have moved it aside already.
+    await store.settled()
+    const keptAt = await store.keepUnreadableFile()
+    if (backup?.kind === 'parsed' && keptAt !== undefined) {
+      store.loadProblem = { kind: 'restored', filePath, keptAt }
+      store.onProblem({ kind: 'restored', filePath, backupPath })
+      store.persist()
+    } else {
+      store.loadProblem = { kind: 'unreadable', filePath, ...(keptAt === undefined ? {} : { keptAt }) }
     }
     return store
   }
 
-  /** Why the file on disk could not be read, when it could not. */
+  /** Why the file on disk could not be read at open, when it could not. */
   get unreadable(): string | undefined {
     return this.unreadableReason
+  }
+
+  /** What the window should say about the file, oldest first. */
+  problems(): WorkspaceFileProblem[] {
+    const problems: WorkspaceFileProblem[] = this.loadProblem === undefined ? [] : [this.loadProblem]
+    if (this.saveFailure !== undefined)
+      problems.push({ kind: 'saveFailed', filePath: this.filePath, ...this.saveFailure })
+    return problems
+  }
+
+  /** Writes now; true when the file is saved. */
+  async retrySave(): Promise<boolean> {
+    this.persist()
+    await this.settled()
+    return this.saveFailure === undefined && !this.unreadablePending
+  }
+
+  /** Stops retrying a failed write; the store is done with. */
+  close(): void {
+    this.stopRetrying()
   }
 
   listProjects(): Project[] {
@@ -418,17 +471,20 @@ export class WorkspaceStore {
 
   /** Waits for every scheduled write and surfaces the last write failure once. */
   async flush(): Promise<void> {
-    let awaited: Promise<void>
-    do {
-      awaited = this.queue
-      await awaited
-    } while (awaited !== this.queue)
-
+    await this.settled()
     const error = this.writeError
     if (error !== undefined) {
       this.writeError = undefined
       throw error
     }
+  }
+
+  private async settled(): Promise<void> {
+    let awaited: Promise<void>
+    do {
+      awaited = this.queue
+      await awaited
+    } while (awaited !== this.queue)
   }
 
   private persist(): void {
@@ -437,34 +493,67 @@ export class WorkspaceStore {
     this.queued = true
     this.queue = this.queue.then(async () => {
       this.queued = false
+      if (this.unreadablePending && (await this.keepUnreadableFile()) === undefined) return
       try {
-        if (!(await this.keepUnreadableFile())) return
         await writeJsonFileAtomically(this.filePath, this.document())
-        this.reportedWriteFailure = false
       } catch (error) {
-        this.writeError = error
-        // Said the first time: finding out at shutdown is too late.
-        if (!this.reportedWriteFailure) {
-          this.reportedWriteFailure = true
-          this.onProblem({ kind: 'writeFailed', filePath: this.filePath, reason: describeError(error) })
-        }
+        this.writeFailed(error)
+        return
       }
+      await this.backUp()
+      this.writeError = undefined
+      this.stopRetrying()
+      if (this.saveFailure === undefined) return
+      this.saveFailure = undefined
+      this.onProblem({ kind: 'saved', filePath: this.filePath })
     })
   }
 
-  /** Moves an unreadable file aside before anything writes over it; false stops the write. */
-  private async keepUnreadableFile(): Promise<boolean> {
-    if (this.unreadableReason === undefined) return true
+  private writeFailed(error: unknown): void {
+    this.writeError = error
+    this.stopRetrying()
+    // A timer, not a watch: nothing says when a full disk frees up.
+    this.retryTimer = setTimeout(() => this.persist(), this.retryMs)
+    this.retryTimer.unref()
+    // Said the first time: finding out at shutdown is too late.
+    if (this.saveFailure !== undefined) return
+    const code = (error as NodeJS.ErrnoException).code
+    this.saveFailure = { reason: describeError(error), diskFull: code === 'ENOSPC' || code === 'EDQUOT' }
+    this.onProblem({ kind: 'writeFailed', filePath: this.filePath, reason: this.saveFailure.reason })
+  }
+
+  private stopRetrying(): void {
+    clearTimeout(this.retryTimer)
+    this.retryTimer = undefined
+  }
+
+  /** A copy of what was just written; a clone where the disk can, so it costs no space until one changes. */
+  private async backUp(): Promise<void> {
+    const staged = `${this.filePath}${BACKUP_SUFFIX}.${process.pid}.tmp`
+    try {
+      await copyFile(this.filePath, staged, constants.COPYFILE_FICLONE)
+      await rename(staged, this.filePath + BACKUP_SUFFIX)
+    } catch {
+      await rm(staged, { force: true }).catch(() => {})
+    }
+  }
+
+  /** Moves the unreadable file aside so nothing writes over it; undefined while it could not be. */
+  private async keepUnreadableFile(): Promise<string | undefined> {
+    if (!this.unreadablePending) return this.keptAt
     const keptAt = `${this.filePath}.unreadable-${new Date(this.now()).toISOString().replace(/[:.]/g, '-')}`
     try {
       await rename(this.filePath, keptAt)
     } catch (error) {
-      this.onProblem({ kind: 'notWritten', filePath: this.filePath, reason: describeError(error) })
-      return false
+      if (!this.saidNotWritten)
+        this.onProblem({ kind: 'notWritten', filePath: this.filePath, reason: describeError(error) })
+      this.saidNotWritten = true
+      return undefined
     }
-    this.unreadableReason = undefined
+    this.unreadablePending = false
+    this.keptAt = keptAt
     this.onProblem({ kind: 'keptAside', filePath: this.filePath, keptAt })
-    return true
+    return keptAt
   }
 
   private document(): WorkspaceDocument {

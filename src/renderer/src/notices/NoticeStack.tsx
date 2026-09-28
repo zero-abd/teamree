@@ -18,6 +18,7 @@ import { askForYou, useMessageStore } from '../state/messages'
 import { hiddenAsks, type HiddenAsk } from './askingNotices'
 import { SendBlockToAgent } from '../workspace/rightPanel/CommitBlocked'
 import { liveAction, NOTICE_ICON, noticeLook, noticeParts } from './noticeView'
+import { StoreProblemCards } from './StoreProblemCards'
 import { useAnnouncements } from './useAnnouncements'
 
 /** The slide out is 180 ms; this is only for a card whose animation never ends (none running, a test). */
@@ -34,6 +35,7 @@ export function NoticeStack(): React.JSX.Element {
   return (
     // Bottom right above the status bar: notices stack above the update card, never over it.
     <div className="corner-stack">
+      <StoreProblemCards />
       <SharedNotePopups />
       <HandoffPopups />
       <ReviewPopups />
