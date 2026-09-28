@@ -997,9 +997,9 @@ export class TerminalSessionManager {
   async shutdown(): Promise<void> {
     this.subagents.close()
     const sessions = [...this.sessions.values()]
-    // With Keep Agents Running, a pane in the host is let go of, not killed.
-    const keep = this.options.paneHost?.keeps() === true
+    // With Keep Agents Running, a pane in the host is let go of, not killed; a host with none is ended.
     const keptIds = new Set(this.keptOnQuit())
+    const keep = keptIds.size > 0
     this.sessions.clear()
     const kept = new Set(sessions.filter((session) => keptIds.has(session.id)))
     const ended = sessions.filter((session) => !kept.has(session))

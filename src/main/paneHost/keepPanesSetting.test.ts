@@ -232,6 +232,11 @@ describePty('Keep Agents Running When teamree Quits', () => {
     const fresh = (await call(runtime, 'paneHost.status', {})) as PaneHostStatus
     expect(fresh).toMatchObject({ running: true, panes: 0 })
     expect(fresh.pid).not.toBe(hostPid)
+
+    // With nothing in it, a quit ends the fresh host rather than leaving it empty.
+    await quit(runtime)
+    await until(() => !alive(fresh.pid ?? 0), 'the empty host to exit')
+    expect(await peekHost(userDataDir, 'test')).toBeNull()
   })
 })
 
