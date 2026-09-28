@@ -234,6 +234,8 @@ export class PtySession {
   private agentRestarted = false
   /** True once anybody has typed into this pane; see `TerminalRecord.typed`. */
   private typedInto = false
+  /** A plain shell started here and not yet typed into: what it prints is its rc files and prompt, not work. */
+  private startingUp = false
   /** True from the moment close() is called: this pane is being ended on purpose. */
   private closing = false
   /** The session the agent named in its exit line, which is kept out of the pane. */
@@ -286,7 +288,9 @@ export class PtySession {
   static start(init: PtySessionInit): PtySession {
     const platform = init.platform ?? process.platform
     const handle = startChild(init, init.command, platform)
-    return new PtySession(init, handle, platform)
+    const session = new PtySession(init, handle, platform)
+    session.startingUp = init.command === undefined
+    return session
   }
 
   /** A pane around a child that is already running, e.g. one the pane host kept through a restart. */
@@ -427,6 +431,7 @@ export class PtySession {
       // Typing into a restored pane is the user taking it over.
       this.restored = undefined
       this.typedInto = true
+      this.startingUp = false
       // What answers these bytes is output, not the last resize's repaint.
       this.resizedAt = Number.NEGATIVE_INFINITY
       // A bell is a question; this is somebody answering it.
@@ -600,7 +605,7 @@ export class PtySession {
       if (this.draining) this.restartQuietWindow()
       return
     }
-    if (this.clock() - this.resizedAt >= REDRAW_AFTER_RESIZE_MS) this.noteActivity()
+    if (!this.startingUp && this.clock() - this.resizedAt >= REDRAW_AFTER_RESIZE_MS) this.noteActivity()
     this.emit({ type: 'data', data: chunk, end: this.append(chunk) })
     this.cancelScreenRead ??= this.scheduler(() => {
       this.cancelScreenRead = undefined

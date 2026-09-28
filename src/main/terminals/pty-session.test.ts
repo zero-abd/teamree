@@ -492,6 +492,23 @@ describePty('PtySession', () => {
     TEST_TIMEOUT_MS
   )
 
+  // ⌘W straight after ⌘D asked "Stop what is running here?" of a shell only drawing its prompt.
+  it(
+    'does not count a new shell starting up as work, and counts what follows a keystroke',
+    async () => {
+      const edges: boolean[] = []
+      const session = start({ onActivityChange: (each) => edges.push(each.isBusy) })
+      const events = collect(session)
+      await waitUntil(() => outputOf(events).length > 0, 'the prompt')
+      expect(session.isBusy).toBe(false)
+      expect(edges).toEqual([])
+
+      session.write('echo typed\n')
+      await waitUntil(() => session.isBusy, 'the echo to count as work')
+    },
+    TEST_TIMEOUT_MS
+  )
+
   it(
     'does not count a repaint for a new size as output, and counts what follows it',
     async () => {

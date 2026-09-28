@@ -191,6 +191,11 @@ describe('closing', () => {
     expect(focusAfterClose(row(leaf('x'), leaf('y')), 'x')).toBe('y')
     expect(focusAfterClose(leaf('x'), 'x')).toBeNull()
   })
+
+  it('moves the focus from a group’s last tab to the tab the neighbouring group shows, never a hidden one', () => {
+    expect(focusAfterClose(row(tabs(['a', 'b', 'c'], 'a'), leaf('x')), 'x')).toBe('a')
+    expect(focusAfterClose(row(leaf('x'), tabs(['a', 'b', 'c'], 'c')), 'x')).toBe('c')
+  })
 })
 
 describe('files', () => {

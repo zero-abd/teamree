@@ -104,12 +104,11 @@ export function splitTabOut(root: PaneNode, id: string, direction: 'row' | 'colu
   return dropTab(root, id, id, direction === 'row' ? 'right' : 'bottom')
 }
 
-/** Where focus goes when `id` closes: the tab its group shows next, else the neighbouring pane. */
+/** Where focus goes when `id` closes: the tab its group shows next, else the tab the neighbouring group shows. */
 export function focusAfterClose(root: PaneNode | null, id: string): string | null {
-  const others = groupTabIds(groupOf(root, id)).filter((each) => each !== id)
-  const rest = others.length > 0 ? closePane(root, id) : null
-  const group = others[0] === undefined ? null : groupOf(rest, others[0])
-  return group === null ? neighbourTerminalId(root, id) : shownOf(group)
+  const heir = groupTabIds(groupOf(root, id)).find((each) => each !== id) ?? neighbourTerminalId(root, id)
+  const group = heir === null ? null : groupOf(closePane(root, id), heir)
+  return group === null ? heir : shownOf(group)
 }
 
 /** `group` holding `tabs` with `shown` on show; one terminal alone is that pane. */

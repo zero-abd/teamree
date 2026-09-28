@@ -412,6 +412,42 @@ describePty('terminal handlers', () => {
   )
 
   it(
+    'moves the focus from a group’s last tab to the tab the group beside it shows',
+    async () => {
+      const service = newService()
+      const [hidden, shown, lone] = [await newTerminal(service), await newTerminal(service), await newTerminal(service)]
+      const group: PaneNode = {
+        kind: 'split',
+        direction: 'column',
+        sizes: [0.5, 0.5],
+        children: [
+          { kind: 'leaf', terminalId: hidden.id },
+          { kind: 'leaf', terminalId: shown.id }
+        ],
+        tabs: true,
+        shown: shown.id
+      }
+      await service.handlers['layout.set']({
+        worktreeId: WORKTREE,
+        root: {
+          kind: 'split',
+          direction: 'row',
+          sizes: [0.5, 0.5],
+          children: [group, { kind: 'leaf', terminalId: lone.id }]
+        },
+        focusedTerminalId: lone.id
+      })
+
+      await service.handlers['terminal.close']({ terminalId: lone.id })
+
+      const layout = await service.handlers['layout.get']({ worktreeId: WORKTREE })
+      expect(layout.root).toEqual(group)
+      expect(layout.focusedTerminalId).toBe(shown.id)
+    },
+    TEST_TIMEOUT_MS
+  )
+
+  it(
     'empties the layout when the last pane is closed',
     async () => {
       const service = newService()
