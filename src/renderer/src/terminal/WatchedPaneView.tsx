@@ -14,6 +14,7 @@ import { detectPlatform, holdsModifier, resolvePlatformModifier } from '../keybo
 import { runtimeClient } from '../runtimeClient/currentRuntimeClient'
 import { paneNames } from '../sidebar/agentRows'
 import { RowMenu, type RowMenuAnchor } from '../sidebar/RowMenu'
+import { focusWhenFree } from '../panes/paneFocus'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { handsHere, type HandsHere } from './handsHere'
 import { LinkTipView, linkTips, type LinkTip } from './LinkTip'
@@ -147,6 +148,7 @@ export function WatchedPaneView({
     let observer: ResizeObserver | null = null
     let hands: HandsHere | null = null
     let links: PaneLinks | null = null
+    let stopFocus = (): void => {}
     // A right-click with the bypass key is the menu's, never a mouse report typed onto their machine.
     const releaseRightClick = holdRightClickFromProgram(
       host,
@@ -342,7 +344,7 @@ export function WatchedPaneView({
         term.onData((data) => {
           if (hands?.acting() === true) send(data)
         })
-        if (focusedRef.current) term.focus()
+        if (focusedRef.current) stopFocus = focusWhenFree(() => term?.focus())
         termRef.current = term
         refitRef.current = letterbox
 
@@ -373,6 +375,7 @@ export function WatchedPaneView({
 
     return () => {
       alive = false
+      stopFocus()
       releaseRightClick()
       if (heldTimer !== undefined) clearTimeout(heldTimer)
       termRef.current = null
@@ -430,8 +433,8 @@ export function WatchedPaneView({
 
   // Keeps the keyboard where the focused border says it is, as `TerminalView` does.
   useEffect(() => {
-    if (focused) termRef.current?.focus()
-    else termRef.current?.blur()
+    if (focused) return focusWhenFree(() => termRef.current?.focus())
+    termRef.current?.blur()
   }, [focused, paneId])
 
   const openMenu = (event: React.MouseEvent<HTMLElement>): void => {

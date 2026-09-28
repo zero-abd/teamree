@@ -420,6 +420,23 @@ describe('a slot in the window, like any other pane', () => {
     expect(fakeTerms[0]?.focused).toBe(true)
   })
 
+  it('leaves the keyboard in a dialog that is open when its emulator arrives', async () => {
+    const dialog = document.createElement('div')
+    dialog.setAttribute('role', 'dialog')
+    dialog.setAttribute('aria-modal', 'true')
+    document.body.appendChild(dialog)
+    const watch = armWatch()
+    mount({ focused: true })
+    await watch.resolve()
+    expect(fakeTerms[0]?.focused).toBe(false)
+    await act(async () => {
+      dialog.remove()
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+    expect(fakeTerms[0]?.focused).toBe(true)
+  })
+
   it('asks for the focus when somebody presses it, the way a pane does', async () => {
     const watch = armWatch()
     const { onFocus } = mount()

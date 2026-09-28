@@ -20,6 +20,7 @@ import {
   type ModifierState,
   type PlatformModifier
 } from '../keyboard/platformModifier'
+import { focusWhenFree } from '../panes/paneFocus'
 import { runtimeClient } from '../runtimeClient/currentRuntimeClient'
 import { openInBrowser } from '../shell/openInBrowser'
 import { RowMenu, type RowMenuAnchor } from '../sidebar/RowMenu'
@@ -248,8 +249,8 @@ export function TerminalView({
   }, [terminalId])
 
   useEffect(() => {
-    if (focused) termRef.current?.focus()
-    else termRef.current?.blur()
+    if (focused) return focusWhenFree(() => termRef.current?.focus())
+    termRef.current?.blur()
   }, [focused, terminalId])
 
   // A new size changes how many columns fit and the shell is still writing for

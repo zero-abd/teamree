@@ -205,6 +205,18 @@ describe('the filter field', () => {
     expect(names()).toEqual(['ghost'])
   })
 
+  it('opens the first row on Return, and lets go of the keyboard for the pane it opens', () => {
+    const openWorktree = vi.fn(async () => {})
+    useWorkspaceStore.setState({ openWorktree })
+    mount()
+    openFilter()
+    fireEvent.change(field(), { target: { value: 'ghost' } })
+    fireEvent.keyDown(field(), { key: 'Enter' })
+    expect(openWorktree).toHaveBeenCalledWith('ghost')
+    expect(document.activeElement).not.toBe(field())
+    expect(field().value).toBe('ghost')
+  })
+
   it('is remembered for this window', () => {
     mount()
     openFilter()
