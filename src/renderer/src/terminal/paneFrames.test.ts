@@ -2,7 +2,14 @@
 
 import { describe, expect, it, vi } from 'vitest'
 import { Terminal as XTerm } from '@xterm/xterm'
-import { frameWrites, paneWebgl, syncScrollbarPerFrame, type FrameClock } from './paneFrames'
+import {
+  frameWrites,
+  paintResizesNow,
+  paneWebgl,
+  syncScrollbarPerFrame,
+  type FrameClock,
+  type SizeWatch
+} from './paneFrames'
 
 /** A frame clock the test advances by hand. */
 function manualClock(): FrameClock & { tick: () => void; queued: () => number } {
@@ -145,6 +152,118 @@ describe('syncScrollbarPerFrame', () => {
   })
 })
 
+type RenderService = {
+  _renderer: { value: { dimensions: unknown } }
+  setRenderer: (renderer: unknown) => void
+}
+
+type Canvas = { painted: string[]; draws: () => number; correct: () => void }
+
+/** Paints the way the WebGL renderer does: a resize wipes the canvas and only a render puts rows back;
+ * `correct` is its device-pixel correction, which wipes it again and asks for a repaint. */
+function canvasRenderer(term: XTerm): Canvas {
+  const service = (term as unknown as { _core: { _renderService: RenderService } })._core._renderService
+  const painted: string[] = []
+  let draws = 0
+  let redraw: ((rows: { start: number; end: number }) => void) | null = null
+  const none = (): void => {}
+  service.setRenderer({
+    dimensions: service._renderer.value.dimensions,
+    onRequestRedraw: (listener: typeof redraw) => {
+      redraw = listener
+      return { dispose: none }
+    },
+    handleResize: () => void painted.splice(0),
+    renderRows: (start: number, end: number) => {
+      draws += 1
+      const buffer = term.buffer.active
+      for (let row = start; row <= end; row++) {
+        painted[row] = buffer.getLine(buffer.viewportY + row)?.translateToString(true) ?? ''
+      }
+    },
+    dispose: none,
+    handleDevicePixelRatioChange: none,
+    handleCharSizeChanged: none,
+    handleBlur: none,
+    handleFocus: none,
+    handleSelectionChanged: none,
+    handleCursorMove: none,
+    clear: none
+  })
+  return {
+    painted,
+    draws: () => draws,
+    correct: () => {
+      painted.splice(0)
+      redraw?.({ start: 0, end: term.rows - 1 })
+    }
+  }
+}
+
+const nextFrame = (): Promise<void> => new Promise((resolve) => requestAnimationFrame(() => resolve()))
+
+/** A frame with a pane's fit in it: the resize in its animation frame, then the size observers in the
+ * order they were made. Reads the canvas as that frame goes to the screen. */
+function resizeInFrame(term: XTerm, canvas: Canvas, rows: number, laterObservers: () => void): Promise<string[]> {
+  return new Promise((resolve) =>
+    requestAnimationFrame(() => {
+      term.resize(40, rows)
+      queueMicrotask(() => {
+        canvas.correct()
+        laterObservers()
+        resolve([...canvas.painted])
+      })
+    })
+  )
+}
+
+/** A size watch the test fires by hand. */
+function handWatch(): { watch: SizeWatch; fire: () => void; watching: () => number } {
+  const changed = new Set<() => void>()
+  return {
+    watch: (_target, callback) => {
+      changed.add(callback)
+      return { dispose: () => void changed.delete(callback) }
+    },
+    fire: () => changed.forEach((callback) => callback()),
+    watching: () => changed.size
+  }
+}
+
+describe('paintResizesNow', () => {
+  it('without it, the frame a resize lands in goes to the screen blank', async () => {
+    const { term, write } = openTerm()
+    const canvas = canvasRenderer(term)
+    await write('one\r\ntwo')
+    await nextFrame()
+    expect(canvas.painted.slice(0, 2)).toEqual(['one', 'two'])
+    expect(await resizeInFrame(term, canvas, 8, () => {})).toEqual([])
+    term.dispose()
+  })
+
+  it('paints every row of the new size in the frame of the resize, once', async () => {
+    const { term, write } = openTerm()
+    const canvas = canvasRenderer(term)
+    const sizes = handWatch()
+    const painting = paintResizesNow(term, document.createElement('canvas'), sizes.watch)
+    await write('one\r\ntwo')
+    await nextFrame()
+    const before = canvas.draws()
+    expect(await resizeInFrame(term, canvas, 8, sizes.fire)).toEqual(['one', 'two', '', '', '', '', '', ''])
+    await nextFrame()
+    expect(canvas.draws()).toBe(before + 1)
+    painting.dispose()
+    expect(await resizeInFrame(term, canvas, 6, sizes.fire)).toEqual([])
+    term.dispose()
+  })
+
+  it('does nothing to an emulator without the render queue it expects', () => {
+    const sizes = handWatch()
+    paintResizesNow({}, document.createElement('canvas'), sizes.watch)
+    expect(() => sizes.fire()).not.toThrow()
+  })
+})
+
 /** A stand-in for the WebGL addon: its context, and the loss it can be told to report. */
 function fakeAddon(log: string[], name: string) {
   let onLoss: (() => void) | null = null
@@ -154,7 +273,7 @@ function fakeAddon(log: string[], name: string) {
   }
   return {
     addon: {
-      _renderer: { _gl: gl },
+      _renderer: { _gl: gl, _canvas: document.createElement('canvas') },
       onContextLoss: (listener: () => void) => {
         onLoss = listener
         return { dispose: () => {} }
@@ -169,16 +288,33 @@ function fakeAddon(log: string[], name: string) {
 describe('paneWebgl', () => {
   const setup = () => {
     const log: string[] = []
+    const order: string[] = []
     const made: ReturnType<typeof fakeAddon>[] = []
-    const term = { loadAddon: vi.fn() }
+    const term = { loadAddon: vi.fn(() => void order.push(`addon ${made.length} loaded`)) }
     const create = vi.fn(() => {
       const fake = fakeAddon(log, `addon ${made.length + 1}`)
       made.push(fake)
       return fake.addon as never
     })
-    const gpu = paneWebgl(term as never, create)
-    return { log, made, term, create, gpu }
+    const sizes = handWatch()
+    const gpu = paneWebgl(term as never, create, (target, changed) => {
+      order.push(`watching addon ${made.length}`)
+      return sizes.watch(target, changed)
+    })
+    return { log, order, made, term, create, gpu, sizes }
   }
+
+  it('watches each canvas it loads for size, after the addon, and stops with it', () => {
+    const { order, made, gpu, sizes } = setup()
+    expect(order).toEqual(['addon 1 loaded', 'watching addon 1'])
+    made[0]?.lose()
+    expect(sizes.watching()).toBe(0)
+    gpu.retry()
+    expect(order.slice(-2)).toEqual(['addon 2 loaded', 'watching addon 2'])
+    expect(sizes.watching()).toBe(1)
+    gpu.dispose()
+    expect(sizes.watching()).toBe(0)
+  })
 
   it('releases the context itself on unmount rather than waiting for the collector', () => {
     const { log, gpu } = setup()
