@@ -6,23 +6,27 @@
 </h1>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/release-coming%20soon-08C" alt="Release coming soon">
-  <img src="https://img.shields.io/badge/platform-macOS-08C" alt="macOS">
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-08C" alt="MIT licence"></a>
+  <a href="https://github.com/zero-abd/teamree/releases/latest"><img src="https://img.shields.io/github/v/release/zero-abd/teamree?color=8B8CF7&label=release" alt="Latest release"></a>
+  <img src="https://img.shields.io/badge/platform-macOS-8B8CF7" alt="macOS">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-8B8CF7" alt="MIT licence"></a>
+  <a href="https://teamree.us"><img src="https://img.shields.io/badge/site-teamree.us-0B0C0E" alt="teamree.us"></a>
 </p>
 
 <p align="center">
-  <strong>Your whole team ships in parallel.</strong><br/>
-  Every agent in its own git worktree. Every teammate in the same window.
+  <strong>Your whole team ships in <em>parallel.</em></strong><br/>
+  The agentic development environment for teams. Every agent in its own git worktree. Every teammate in the same window.
 </p>
 
 <p align="center">
-  <img src="docs/screenshot.png" width="960" alt="Three worktrees in the sidebar, each listing its panes with a status dot, beside two split terminals — one running a coding agent, one showing a finished build">
+  <a href="https://teamree.us/demos/showreel-1080.mp4"><img src="docs/media/showreel-teaser.webp" width="800" alt="The opening of the teamree showreel: five coding agents pile into one repo, then Sprig introduces teamree, the ADE for teams"></a><br/>
+  <sub><a href="https://teamree.us/demos/showreel-1080.mp4">▶ Watch the 39-second showreel</a> · <a href="https://teamree.us">teamree.us</a> · <a href="https://github.com/zero-abd/teamree/releases/latest/download/teamree-mac-universal.dmg">Download for macOS</a></sub>
 </p>
 
 ---
 
 ## What it is
+
+teamree is an ADE, an agentic development environment, for teams.
 
 Five agents on one repository overwrite each other's files, and five terminal tabs
 will not tell you which one has stopped and is waiting for an answer. teamree gives
@@ -32,6 +36,37 @@ them in one place.
 It is a desktop application, and it is also a CLI over the same runtime — so an
 agent can create a worktree, open a terminal and read the output back, and the
 window reflects all of it live.
+
+## See it
+
+Real footage of v0.8.3, with stand-in agents. Each still opens its clip.
+
+<table>
+<tr>
+<td width="50%" valign="top"><a href="https://teamree.us/demos/parallel-1080.mp4"><img src="docs/media/parallel.webp" alt="Every agent, its own worktree."></a><br/><b>Every agent, its own worktree.</b><br/><sub>Claude Code ×3 and Codex ×1 from one task, side by side.</sub></td>
+<td width="50%" valign="top"><a href="https://teamree.us/demos/sidebar-1080.mp4"><img src="docs/media/sidebar.webp" alt="One sidebar shows every task."></a><br/><b>One sidebar shows every task.</b><br/><sub>Working, asking you, ready, failed or ended.</sub></td>
+</tr>
+<tr>
+<td width="50%" valign="top"><a href="https://teamree.us/demos/ask-1080.mp4"><img src="docs/media/ask.webp" alt="Agents can ask you, right from the CLI."></a><br/><b>Agents can ask you, right from the CLI.</b><br/><sub><code>teamree msg ask</code> puts the question in the pane, answers as buttons.</sub></td>
+<td width="50%" valign="top"><a href="https://teamree.us/demos/panes-1080.mp4"><img src="docs/media/panes.webp" alt="Split it. Tab it."></a><br/><b>Split it. Tab it.</b><br/><sub>⌘D splits a pane with its own tab bar; ⌘T adds a tab.</sub></td>
+</tr>
+<tr>
+<td width="50%" valign="top"><a href="https://teamree.us/demos/cmd-click-1080.mp4"><img src="docs/media/cmd-click.webp" alt="⌘-click any file to check its work."></a><br/><b>⌘-click any file to check its work.</b><br/><sub>Paths in an agent&#39;s output open in the app.</sub></td>
+<td width="50%" valign="top"><a href="https://teamree.us/demos/online-720.mp4"><img src="docs/media/online.webp" alt="Host a relay. Send the link. Your team is live."></a><br/><b>Host a relay. Send the link. Your team is live.</b><br/><sub><code>teamree team invite</code>, then <code>teamree team accept</code> on their Mac.</sub></td>
+</tr>
+<tr>
+<td width="50%" valign="top"><a href="https://teamree.us/demos/team-live-1080.mp4"><img src="docs/media/team-live.webp" alt="Every teammate&#39;s agents in one sidebar."></a><br/><b>Every teammate&#39;s agents in one sidebar.</b><br/><sub>A teammate&#39;s task appears in your sidebar as it starts.</sub></td>
+<td width="50%" valign="top"><a href="https://teamree.us/demos/overlap-1080.mp4"><img src="docs/media/overlap.webp" alt="Spot the overlap before it&#39;s a conflict."></a><br/><b>Spot the overlap before it&#39;s a conflict.</b><br/><sub>A chip marks tasks that change the same files.</sub></td>
+</tr>
+<tr>
+<td width="50%" valign="top"><a href="https://teamree.us/demos/review-1080.mp4"><img src="docs/media/review.webp" alt="Review live."></a><br/><b>Review live.</b><br/><sub>Line comments go straight to Claude Code.</sub></td>
+<td width="50%" valign="top"><a href="https://teamree.us/demos/land-1080.mp4"><img src="docs/media/land.webp" alt="Ready to land? Land All."></a><br/><b>Ready to land? Land All.</b><br/><sub>Fetched first, merged in order; a conflict is skipped with Resolve….</sub></td>
+</tr>
+<tr>
+<td width="50%" valign="top"><a href="https://teamree.us/demos/cli-1080.mp4"><img src="docs/media/cli.webp" alt="A CLI over the same runtime."></a><br/><b>A CLI over the same runtime.</b><br/><sub>Agents create worktrees, open terminals and message you. Every command takes <code>--json</code>.</sub></td>
+<td width="50%" valign="top"><a href="https://teamree.us/demos/tooltips-720.mp4"><img src="docs/media/tooltips.webp" alt="Hover anything."></a><br/><b>Hover anything.</b><br/><sub>Every count, dot and pill says what it means.</sub></td>
+</tr>
+</table>
 
 ## Install
 

@@ -48,20 +48,21 @@ surface states a fact.
 
 | Surface | Exact copy |
 | --- | --- |
-| Site `<title>` | `teamree — your whole team ships in parallel` |
+| Site `<title>` | `teamree — the ADE for teams` |
 | Site hero h1 | `Your whole team ships in parallel.` |
-| Site hero sub-line | `Every agent in its own git worktree. Every teammate in the same window.` |
+| Site hero lede | `teamree is an agentic development environment for teams. Claude Code, Codex and the other agents each get their own git worktree, and every teammate's agents show up in one sidebar.` |
 | Site hero buttons | `Download for macOS` · `Source on GitHub` |
-| Site hero note | `Free. macOS 12 or later. Universal build.` |
-| Site section h2 | `A worktree per task` · `A state per pane` · `A CLI agents can drive` · `Teammates in the window` · `Install` |
-| Site meta / og description | `The agentic development environment for teams. Claude Code, Codex and other coding agents shipping side by side, each in its own git worktree, in one window your teammates can watch.` |
-| og card | h1 `Your whole team ships in parallel.` — line `Every agent in its own git worktree. Every teammate in the same window.` — foot `teamree.us` |
-| README first line | `**Your whole team ships in parallel.**` then the sub-line |
+| Site hero note | `open source · MIT · macOS universal · free` |
+| Site section h2 | The showreel's lines: `Every agent, its own worktree.` · `One sidebar shows every task.` · `Agents can even ask you, right from the CLI.` · `Split it. Tab it. Answer it.` · `Host a relay. Send the link. Your team is live.` · `Every teammate's agents in one sidebar.` · `Review live.` · `Ready to land? Land All.` |
+| Site meta / og description | `teamree is the agentic development environment for teams. Claude Code, Codex and other coding agents, each in its own git worktree, and every teammate's agents in one sidebar. Open source and free for macOS.` |
+| og card | label `// 00 — the ADE for teams` — lockup — h1 `Your whole team ships in parallel.` — `Download for macOS` — `open source · MIT · macOS · teamree.us`; Sprig waving on a lavender panel |
+| README first line | `**Your whole team ships in parallel.**` then `The agentic development environment for teams.` and the sub-line; the showreel teaser under it |
 | `package.json` description | `Your whole team ships in parallel. Every agent in its own git worktree. Every teammate in the same window.` |
 | GitHub repo description | `Your whole team ships in parallel.` |
 | App About / DMG | `teamree` — `Your whole team ships in parallel.` — version |
 | App welcome (empty window) | Unchanged: `No terminals here yet` and the three buttons. No slogan in the app. |
 | 404 | `Not found.` — `The link is old or the page moved.` — `Back to teamree` |
+| Showreel end card | lockup — `Open source & free for all.` — `Download for macOS` · `teamree.us` — `open source · MIT · macOS · v0.8.3` |
 
 ## Voice
 
@@ -73,128 +74,72 @@ surface states a fact.
 
 ## Visual system
 
-Palette (light on dark; no light theme on the site):
+The look comes from the v5 showreel; the site, the og card and the reel share it.
+
+Grounds. Three, and a page moves between them: **paper** `#F5F5F2` (cards `#FFFFFF`),
+**lavender** `#8B8CF7`, **black** `#090909` (bento ground `#0E0F12`, tiles `#17181C`).
+A new ground arrives as a circle growing from an object on screen, never a hard cut.
 
 | Token | Hex | Use |
 | --- | --- | --- |
-| `--ground` | `#0B0C0E` | page |
-| `--tile` | `#101114` | cards, window mats, the header pill |
-| `--tile-2` | `#171718` | the tile under the mark, code chips, hover |
-| `--ink` | `#F3F2EE` | headings, the mark |
-| `--ink-2` | `#C8C7C2` | body |
-| `--muted` | `#A09F9B` | captions, footer |
-| `--line` | `rgb(243 242 238 / 9%)` | hairlines; `16%` on hover |
-| `--accent` | `#8b8cf7` | the dot after the wordmark, focus ring; links use `#A9AAFF` |
-| `--working` | `#9e9ef8` | state dot, as in the app |
-| `--waiting` | `#d6a24a` | state dot |
-| `--finished` | `#57c38a` | state dot |
-| `--failed` | `#e8615a` | state dot |
+| `--paper` | `#F5F5F2` | the default ground |
+| `--ink` | `#0B0C0E` | type on paper and lavender |
+| `--ink2` | `#3A3B40` | body on paper |
+| `--muted` | `#5F5F5A` | captions, labels |
+| `--accent` | `#8B8CF7` | the lavender ground, the wordmark's dot, the accent word on black |
+| `--accent-ink` | `#5B5CEB` | buttons, the accent word on paper, focus |
+| `--light` | `#F3F2EE` | type on black |
+| state dots | `#9E9EF8` working · `#D6A24A` asking · `#57C38A` ready · `#E8615A` failed · `#85878B` ended | as in the app |
 
-The accent is spent in three places on the page: the wordmark's dot, focus, and
-links. Not on buttons, not on backgrounds, not on headings.
+One accent. Red appears once, on *Chaos.*, and on conflicts.
 
-Type: the system face (`-apple-system, BlinkMacSystemFont, "SF Pro Text",
-"Helvetica Neue", Arial, sans-serif`) for everything; `ui-monospace, "SF Mono",
-Menlo, monospace` for commands, paths and agent names. Nothing downloaded.
+Type. Two voices: the system grotesk (`-apple-system, "SF Pro Display"`) at 650,
+tracking `-0.035em`, line-height `0.98`, for every headline; and **one italic serif
+word** per headline (Fraunces italic 400; `New York` / Georgia where it cannot load)
+in `--accent-ink` on paper, `--accent` on black, ink on lavender. The accent word is
+the payoff: *parallel.*, *worktree.*, *ask*, *live.*, *conflict.*, *straight*, *All.*
+Chrome is mono (JetBrains Mono 500, 11–12px): `// 04 — terminal control` at the
+top left of a section, `TEAMREE 00:00:12:04` running at the top right.
 
-| Role | Size / line / tracking / weight |
-| --- | --- |
-| h1 | `clamp(40px, 2.2rem + 2.4vw, 64px)` / 1.05 / -0.03em / 600 |
-| h2 | 28px / 1.2 / -0.02em / 600 |
-| h3 | 20px / 1.3 / -0.015em / 600 |
-| lede | 20px / 1.5 / 0 / 400, `--ink-2` |
-| body | 17px / 1.6 / 0 / 400, `--ink-2` |
-| small | 15px / 1.5 / 0 / 400, `--muted` |
-| code | 13px / 1.75, mono |
+Footage. Real recordings of the current version with stand-in agents, in a
+framed window: radius 12–20px, a 1.5px hairline, a long soft shadow. Never a
+mock-up of the app where a recording exists.
 
-Spacing on an 8px grid: sections 96px apart (64px under 900px), 32px between a
-heading and its media, 24px gutters, content column 1120px, page padding 32px
-(20px on phones). Radius: 6px controls, 10px buttons and chips, 14px window
-frames, 999px the header pill.
+Buttons. Pills: `--accent-ink` with white text, 48px tall; a ghost pill with a
+hairline for the second action.
 
-Background: not flat. Two layers on `--ground`, both fixed, both under everything:
-a radial vignette from the tile tone, `radial-gradient(ellipse 70% 50% at 50% 0,
-#15161A, #0B0C0E 70%)`, and a 48px grid of `rgb(243 242 238 / 3%)` hairlines,
-masked with `linear-gradient(#000 0, transparent 900px)` so it fades out under
-the product shot. No noise, no glow, no animated gradient.
+Sprig. The mascot: a curly tree-crown head with a lavender leaf, a sweater with
+the mark on it, clay hands, drawn in a 1-bit halftone dither. On the site it
+appears as transparent stills (wave, point, talk, grab, happy, worried) beside
+the content, never over footage and never over the hero reel. It is not in the app.
 
-The mark:
+The mark: unchanged. Clear space half its width; never cropped, never the
+accent, never rotated. The lockup is the mark, the wordmark, and the lavender dot
+on the baseline.
 
-- Clear space around the mark is half its width, on every side, always.
-- Never cropped. Every inline SVG that carries brand paths uses the mark's own
-  `viewBox="0 0 256 256"` (28 units of headroom are inside it) or, for the
-  wordmark, a viewBox padded by at least 8 units on every side, and
-  `overflow: visible`. Today's `viewBox="0 10 582 82"` leaves 0.4px above the
-  mark at 118px wide and is what clips it; it is retired.
-- In navigation and footer the mark sits on its tile: a 28px square of
-  `--tile-2`, radius 7px, the mark at 62% of the tile's width, centred; then an
-  8px gap, the wordmark (the path, cap height 14px, in `--ink`), then the accent
-  dot, 4px, sitting on the wordmark's baseline. That is the lockup the app's
-  title strip draws; the site draws the same one.
-- Standalone, without a tile, only in the hero, at large size: left of the h1,
-  spanning from the cap line of the first line to the baseline of the second.
-  For the system face that is top `0.16em` below the h1 box and height
-  `1.72em` of the h1 size. The h1 is set to break at exactly two lines above
-  900px; below that the mark moves above the h1 at 56px tall and the rule is
-  simply left-aligned with the text.
-- The mark is `--ink`. Never the accent, never a gradient, never rotated.
+## Motion
+
+- No hard cuts. A change of ground is a flood from an object; footage enters with
+  a whip (a short rise with a blur that clears).
+- Headlines rise word by word with an echo that settles; the accent word lands last.
+- Scroll-driven scenes keep moving until they release; nothing holds still while
+  the user scrolls.
+- Clips play only while on screen. Under `prefers-reduced-motion` every scene shows
+  its final state and nothing plays.
 
 ## Page blueprint
 
-Header. At scroll 0: full width, flush, 60px tall, transparent over the
-vignette: lockup on the left, `Worktrees · Panes · Teamwork · Install` and a
-`GitHub` button on the right. Past 32px of scroll it becomes a fixed, centred
-pill (back below 8px): 48px tall, 12px from the top, at most 760px wide, `--tile`
-at 80% over `backdrop-filter: blur(16px)`, one `--line` border, radius 999px,
-holding the same lockup, links and button. The row never resizes: the lockup
-and links translate inward while the pill fades in and narrows from the row's
-width with its edges riding on them, all in one 640ms `cubic-bezier(.2,.8,.2,1)`
-that a reversed scroll reverses mid-flight. Under `prefers-reduced-motion` the
-contents switch at once and the pill cross-fades in 200ms. On phones both states hold the lockup and a `Menu` disclosure; the
-pill is 48px tall and spans the width less 16px each side.
+The page follows the showreel's script, one section per line:
 
-Footer. One row: the lockup on its tile at the left; `Source · Releases · MIT ·
-Installing · Trying teamwork · Roadmap` at the right; under it, in `--muted`,
-`macOS. Universal. Free.` No slogan.
+0. **Hero.** `// 00` label, the h1 with *parallel.*, the lede, `Download for macOS`
+   and `Source on GitHub`, the note; the showreel beside it with `Watch with sound`.
+1. **Hook** (paper, pinned). *Five agents. One repo. Chaos.* Five agent cards pile
+   into one and turn red; the lavender floods out to *Meet teamree, the ADE for teams.*
+2. **Worktrees** · 3. **Sidebar** (black) · 4. **Asking** · 5. **Terminal control**
+   (lavender) · 6. **Relay, in three steps** · 7. **Teammates** (black bento, the
+   overlap tile in lavender) · 8. **Review** (lavender) · 9. **Land All** ·
+   10. **Details** · 11. **Install** (black) · 12. **FAQ**
+13. **Finale** (black): *Your whole team ships in parallel.* Then the end card:
+   lockup, `Open source & free for all.`, the download pill, `teamree.us`, the proof line.
 
-Sections, in order, six at most:
-
-1. **Hero.** Mark, h1, sub-line, the two buttons, the note. Under it the product
-   shot: `screenshot.png` in a window frame (a `--tile` mat, 6px, radius 14px,
-   three traffic-light dots drawn in `--line`), aspect 1400 / 900. The frame is
-   `data-media="tour"` and holds the showcase clip slot with `screenshot.png`
-   as its poster; the frame never resizes when a clip swaps in.
-2. **A worktree per task.** h2, one line: `Start from any ref. Attempts never
-   see each other's files; abandoning one is deleting a directory.` Clip slot
-   `data-demo="open-anything"`. A second row, media on the left, h3 `Changes open
-   beside panes`: `The diff opens beside the panes. Stage or discard a hunk,
-   commit, publish the branch, then open its review on the forge.` Clip slot
-   `data-demo="review-and-ship"`.
-3. **A state per pane.** h2, one line: `Working, waiting, finished or failed,
-   read off the PTY. One view lists every pane, failures first.` Beside it the
-   four dots with their words, in the app's colours. Then: `Split terminals,
-   nested, a real PTY in each. Finds claude, codex, gemini, opencode and droid on
-   your PATH.` Clip slot `data-demo="every-pane"`. A second row, media on
-   the left, h3 `Pane history survives relaunch`: `Quit and relaunch: file tabs
-   and shell scrollback come back, each shell starts fresh, and an agent with a
-   conversation resumes it.` Clip slot `data-demo="pick-it-back-up"`.
-4. **A CLI agents can drive.** h2, one line: `Create worktrees, run commands and
-   read output over a local socket. Every command takes --json.` A four-line
-   command block, mono, with a Copy button. Clip slot `data-demo="cli"`.
-5. **Teammates in the window.** h2, one line: `Add a teammate's key and they
-   can watch your panes and ask to type; keystrokes run only when you allow
-   them.` Link: `Trying teamwork`. Clip slot `data-demo="teamwork"`.
-6. **Install.** h2. `Free, macOS 12 or later, signed ad-hoc. macOS refuses the
-   first launch: press Done, not Move to Trash, then clear the flag.` The
-   quarantine command and the checksum command, each with Copy. Link:
-   `docs/install.md`.
-
-A section holds at most two rows; the second is `.section-row.reverse`, media
-left and copy right above 900px, copy first below it, 80px under the first (48px
-under 900px).
-
-Clip slots keep the `site/tools/sync-demos.mjs` contract exactly: the
-`demo:video:parked` comments, `data-demo` ids, `width`/`height` on each
-`<video>`, the `.demo-frame::before` padding, and a `figcaption.demo-cap`. A
-clip plays only while on screen, never under reduced motion, and never loops
-on its own; nothing on the page loops.
+`site/README.md` holds the clip-slot contract and the encoder.
