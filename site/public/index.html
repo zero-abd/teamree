@@ -166,6 +166,11 @@ p{margin:0}
 .agent-card .cf{display:none;color:var(--failed);font-weight:600}
 .hook.jam .agent-card{border-color:var(--failed);box-shadow:0 0 0 3px #e8615a40,0 30px 60px -30px #000}
 .hook.jam .agent-card .cf{display:block}
+.hook-sprig{position:absolute;right:max(-40px,-3vw);bottom:-6%;width:clamp(230px,30vw,440px);z-index:4;transition:transform .5s var(--back)}
+.hook-sprig img{position:absolute;inset:0;width:100%;height:auto;transition:opacity .15s}
+.hook-sprig .s2{opacity:0}
+.hook.jam .hook-sprig .s1{opacity:0}.hook.jam .hook-sprig .s2{opacity:1}
+.hook-sprig:before{content:"";display:block;padding-top:100%}
 .cards{position:absolute;right:0;top:0;width:min(62%,760px);height:100%;z-index:2;transform:translateY(calc(var(--q,0)*-10vh))}
 
 
@@ -180,7 +185,8 @@ p{margin:0}
 .meet .lockup-xl i{width:.14em;height:.14em;border-radius:50%;background:#fff;align-self:flex-end;margin:0 0 .06em -.1em}
 .meet p.label{margin-top:22px;font-size:14px;color:#0b0c0ecc}
 
-.meet .inner{position:relative;z-index:2;transform:translateY(calc(var(--q,0)*-14vh));will-change:transform}
+.meet-sprig{position:absolute;left:clamp(-50px,-2vw,-10px);bottom:-2%;width:clamp(170px,19vw,300px);transform:translateY(calc((1 - var(--m,0))*40% + var(--q,0)*-8vh)) rotate(calc((1 - var(--m,0))*-12deg))}
+.meet .inner{position:relative;z-index:2;padding-left:clamp(0px,14vw,240px);transform:translateY(calc(var(--q,0)*-14vh));will-change:transform}
 
 /* 01 — worktrees */
 .parallel-grid{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(0,1fr);gap:clamp(20px,3vw,40px);align-items:center}
@@ -207,7 +213,10 @@ p{margin:0}
 
 /* 03 — asking */
 .ask-grid{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:clamp(20px,3vw,40px);align-items:start}
-.ask-demo{position:relative;margin-bottom:24px}
+.ask-demo{position:relative;min-height:360px;margin-bottom:24px}
+.ask-sprig{position:absolute;right:-6%;bottom:-4%;width:min(50%,230px);z-index:1}
+.term-sprig{width:clamp(150px,14vw,210px);margin:0 0 8px auto}
+.relay-sprig{width:clamp(140px,13vw,200px);margin:4px 0 0 auto;transform:scaleX(-1)}
 .ask-card{position:relative;z-index:2;background:var(--card);border:1.5px solid var(--line2);border-radius:18px;padding:18px 18px 16px;box-shadow:0 30px 60px -36px #0b0c0e66;max-width:380px}
 .ask-card .who{font:500 12px var(--mono);color:var(--muted);display:flex;align-items:center}
 .ask-card p{font-weight:600;font-size:18px;letter-spacing:-.01em;margin:10px 0 14px;line-height:1.3}
@@ -275,6 +284,8 @@ p{margin:0}
 .tile.accent .clip figcaption{color:#0b0c0eb3}
 
 
+.bento .sprig-tile{display:flex;flex-direction:column;justify-content:space-between;min-height:260px}
+.bento .sprig-tile img{width:78%;margin:0 auto -30%;align-self:center}
 .team-note{margin-top:28px;display:flex;flex-wrap:wrap;gap:10px 28px;font:500 12px var(--mono);color:var(--dim)}
 
 /* 07 — review */
@@ -312,6 +323,8 @@ p{margin:0}
 .land-foot span span{opacity:0;transition:opacity .3s}
 .land-foot span span.on{opacity:1}
 .land-grid{position:relative}
+.land-sprig{position:absolute;right:-3%;bottom:-12%;width:clamp(160px,18vw,280px);opacity:0;transform:translateY(40px) scale(.8);transition:opacity .3s,transform .6s var(--back)}
+.land-sprig.on{opacity:1;transform:none}
 
 
 
@@ -366,8 +379,9 @@ p{margin:0}
 .finale h2 em.a{color:var(--accent)}
 .finale .stars{position:absolute;inset:0;background-image:radial-gradient(#8b8cf7 1.5px,transparent 1.6px);background-size:120px 120px;background-position:30px 60px;opacity:.35;mask-image:linear-gradient(transparent,#000 30%,#000 70%,transparent)}
 
+.finale-sprig{position:absolute;right:clamp(-60px,-2vw,0px);bottom:-8%;width:clamp(200px,26vw,420px)}
 .endcard{position:relative;padding:clamp(80px,10vw,140px) 0;overflow:hidden;background:var(--paper)}
-.endcard .wrap{display:block}
+.endcard .wrap{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:24px;align-items:center}
 .endcard .lockup{gap:.24em;font-size:clamp(56px,9vw,128px)}
 .endcard .lockup .mk{width:.82em;height:.82em}
 .endcard .lockup .wd{width:auto;height:.66em;aspect-ratio:440/82}
@@ -376,6 +390,8 @@ p{margin:0}
 .endcard .actions{align-items:center}
 .endcard .url{font:500 16px var(--mono);text-decoration:none}
 
+
+.endcard-sprig{width:clamp(200px,26vw,380px)}
 
 .footer{border-top:1px solid var(--line2);padding:28px 0 40px;background:var(--paper)}
 .footer-row{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:18px}
@@ -412,12 +428,16 @@ p{margin:0}
   .cards{width:100%;top:34%;height:60%}
   
   .agent-card{width:150px;padding:9px 10px}
+  .hook-sprig{width:190px;right:-30px}
+  .meet-sprig{width:170px}
   .meet .inner{padding-left:0}
   
   .land-map.wide{display:none}
   .land-map.tall{display:block;max-width:360px;margin:0 auto}
   .setup{grid-template-columns:1fr}
   .endcard .wrap{grid-template-columns:1fr}
+  .endcard-sprig{width:200px;margin:-20px auto 0}
+  .finale-sprig{width:170px}
   
   
   .chrome .tc{display:none}
@@ -428,18 +448,16 @@ p{margin:0}
   .hook-stage{position:relative;height:auto;min-height:0}
   .hook .wrap{height:auto;padding-bottom:60px}
   .cards{position:relative;width:100%;height:340px}
+  .hook-sprig{display:none}
   
   .meet{position:relative;clip-path:none;padding:80px 0 60px;min-height:0}
+  .meet-sprig{display:none}
   
 }
 .dark .isteps li{border-color:var(--dline)}
 .dark .isteps p{color:#f3f2eec4}
 .dark .isteps li:before{color:var(--accent)}
 .dark .isteps a{color:var(--light)}
-.roster ul{list-style:none;margin:22px 0 18px;padding:0;display:grid;gap:10px}
-.roster li{display:flex;align-items:center;gap:12px;font:500 14px var(--mono);padding:10px 12px;border-radius:12px;background:#f3f2ee0d;border:1px solid var(--dline)}
-.roster li span{margin-left:auto;color:var(--dim);font-size:12px}
-.av{display:inline-grid;place-items:center;width:28px;height:28px;border-radius:8px;color:#fff;font:700 14px var(--sans)}
 .cards{container-type:size}
 
 </style>
@@ -499,7 +517,9 @@ p{margin:0}
 <h2 id="hook-h" style="margin-top:22px"><span class="on">Five agents.</span> <span>One repo.</span> <span><em class="red">Chaos.</em></span></h2>
 <div class="cards" aria-hidden="true"><div class="agent-card" style="--x0:2cqw;--y0:4cqh;--r0:-8deg;--x1:24cqw;--y1:26cqh;--r1:-4deg"><b><i class="dot d-working"></i>Claude Code</b>Update(<s>src/cart/cart.ts</s>)<br>const total = sum(items)<span class="cf">CONFLICT · cart.ts</span></div><div class="agent-card" style="--x0:52cqw;--y0:0cqh;--r0:6deg;--x1:29cqw;--y1:30cqh;--r1:3deg"><b><i class="dot d-working"></i>Codex</b>edit <s>src/cart/cart.ts</s><br>total = round(total)<span class="cf">CONFLICT · cart.ts</span></div><div class="agent-card" style="--x0:6cqw;--y0:46cqh;--r0:5deg;--x1:26cqw;--y1:34cqh;--r1:-2deg"><b><i class="dot d-working"></i>Claude Code</b>Update(<s>src/cart/cart.ts</s>)<br><u>+ const total = round(…)</u><span class="cf">CONFLICT · cart.ts</span></div><div class="agent-card" style="--x0:58cqw;--y0:42cqh;--r0:-6deg;--x1:31cqw;--y1:27cqh;--r1:5deg"><b><i class="dot d-working"></i>Codex</b>edit <s>src/cart/cart.ts</s><br>- const total = …<span class="cf">CONFLICT · cart.ts</span></div><div class="agent-card" style="--x0:30cqw;--y0:68cqh;--r0:9deg;--x1:28cqw;--y1:32cqh;--r1:0deg"><b><i class="dot d-working"></i>Claude Code</b>Update(<s>src/cart/cart.ts</s>)<br>export function total()<span class="cf">CONFLICT · cart.ts</span></div></div>
 </div>
+<div class="hook-sprig" aria-hidden="true"><img class="s1" src="/sprig/talk.webp" width="800" height="800" alt="" loading="lazy" decoding="async"><img class="s2" src="/sprig/worried.webp" width="800" height="800" alt="" loading="lazy" decoding="async"></div>
 <div class="meet">
+<img class="meet-sprig" src="/sprig/wave.webp" width="800" height="800" alt="" loading="lazy" decoding="async">
 <div class="wrap"><div class="inner">
 <h2 class="rise manual"><span class=""><span class="w">Meet</span> <span class="w"><span class="lockup-xl"><svg class="mk" aria-hidden="true"><use href="#mark"/></svg><svg class="wd" viewBox="0 10 440 82" role="img" aria-label="teamree"><use href="#wordmark"/></svg><i aria-hidden="true"></i></span></span></span><br><span class=""><span class="w">the</span> <span class="w">ADE</span> <span class="w">for</span> <span class="w">teams.</span></span></h2>
 <p class="label">// agentic development environment</p>
@@ -588,6 +608,7 @@ p{margin:0}
 <svg class="cursor" data-at="1" data-until="5" viewBox="0 0 22 22" aria-hidden="true"><path d="M3 2l15 9-7 1.5L8 20z" fill="#0b0c0e" stroke="#fff" stroke-width="1.4" stroke-linejoin="round"/></svg>
 <div class="answered" data-at="4">✓ Postgres · Claude Code carries on</div>
 </div>
+<img class="ask-sprig" src="/sprig/point.webp" width="800" height="800" alt="" loading="lazy" decoding="async">
 </div>
 <figure class="clip whip" data-clip="ask-corner" data-sizes="720" style="--ar:1728/1080"><div class="clip-frame"><video width="1728" height="1080" muted playsinline loop preload="none" data-poster="/demos/ask-corner.webp" aria-label="A corner ask card (recording)" aria-describedby="ask-corner-cap"></video><button class="clip-toggle" type="button" aria-label="Play">▶</button></div><figcaption id="ask-corner-cap">From another task, the corner card asks; Redis answers it.</figcaption></figure>
 </div>
@@ -600,7 +621,7 @@ p{margin:0}
 <div class="chrome"><p class="label">// 04 — terminal control</p><span class="tc" aria-hidden="true">TEAMREE <b>00:00:00:00</b></span></div>
 <div class="head">
 <h2 class="rise"><span class=""><span class="w">Split it.</span> <span class="w">Tab it.</span> <span class="w">Answer it.</span></span><br><span class=""><span class="w">⌘-click</span> <span class="w">to</span> <span class="w">check</span> <span class="w">its</span> <span class="w"><em class="a">work.</em></span></span></h2>
-<div><p class="lede">The terminal stays yours, with a few things a terminal can&#39;t do alone.</p>
+<div><img class="term-sprig" src="/sprig/grab.webp" width="800" height="800" alt="" loading="lazy" decoding="async"><p class="lede">The terminal stays yours, with a few things a terminal can&#39;t do alone.</p>
 <div class="verbs" data-tl="4" data-ms="700" data-hold="2" aria-hidden="true"><kbd class="key" data-at="0" data-until="1">⌘D</kbd><kbd class="key" data-at="1" data-until="2">⌘T</kbd><kbd class="key" data-at="2" data-until="3">⌘ click</kbd><kbd class="key" data-at="3" data-until="4">⌘A</kbd></div></div>
 </div>
 <div class="term-grid">
@@ -628,6 +649,7 @@ p{margin:0}
 <div class="relay-side">
 <figure class="clip whip" data-clip="online" data-sizes="720" style="--ar:1728/1080"><div class="clip-frame"><video width="1728" height="1080" muted playsinline loop preload="none" data-poster="/demos/online.webp" aria-label="A teammate comes online (recording)" aria-describedby="online-cap"></video><button class="clip-toggle" type="button" aria-label="Play">▶</button></div><figcaption id="online-cap">Ben&#39;s teamree starts on his machine; over the relay his avatar turns online in Ada&#39;s window.</figcaption></figure>
 <p class="fine">Teammates encrypt end to end; the relay only passes the bytes along.</p>
+<img class="relay-sprig" src="/sprig/point.webp" width="800" height="800" alt="" loading="lazy" decoding="async">
 </div>
 </div>
 </div>
@@ -642,7 +664,7 @@ p{margin:0}
 </div>
 <div class="bento">
 <article class="tile t8"><div class="onair"><span>// teammates</span><span class="live"><i class="dot"></i>live</span></div><figure class="clip whip" data-clip="team-live" data-sizes="1080,720" style="--ar:2048/1080"><div class="clip-frame"><video width="2048" height="1080" muted playsinline loop preload="none" data-poster="/demos/team-live.webp" aria-label="A teammate&#39;s task, live (recording)" aria-describedby="team-live-cap"></video><button class="clip-toggle" type="button" aria-label="Play">▶</button></div><figcaption id="team-live-cap">Ben starts Gift cards at checkout; it appears in Ada&#39;s sidebar within a second.</figcaption></figure></article>
-<article class="tile t4 roster"><div class="onair"><span>// on air</span><span class="live"><i class="dot"></i>live</span></div><h3>Two Macs, one relay, one sidebar.</h3><ul aria-label="Teammates"><li><b class="av" style="background:#5b5ceb">A</b>ada<span><i class="dot d-ready"></i>online</span></li><li><b class="av" style="background:#d6a24a">B</b>ben<span><i class="dot d-ready"></i>online</span></li></ul><p class="sub">Their tasks sit under their name, with each task&#39;s state.</p></article>
+<article class="tile t4 sprig-tile"><div class="onair"><span>// on air</span><span class="live"><i class="dot"></i>ben · online</span></div><h3>Two Macs, one relay, one sidebar.</h3><img class="" src="/sprig/talk.webp" width="800" height="800" alt="" loading="lazy" decoding="async"></article>
 <article class="tile t7 accent"><div class="onair"><span>// overlap</span><span>⚠ same files</span></div><h3 style="margin-bottom:16px">Spot the overlap before it&#39;s a <em class="a">conflict.</em></h3><figure class="clip whip" data-clip="overlap" data-sizes="1080,720" style="--ar:1728/1080"><div class="clip-frame"><video width="1728" height="1080" muted playsinline loop preload="none" data-poster="/demos/overlap.webp" aria-label="The overlap chip (recording)" aria-describedby="overlap-cap"></video><button class="clip-toggle" type="button" aria-label="Play">▶</button></div><figcaption id="overlap-cap">A teammate&#39;s task carries an overlap chip; its tooltip names the files both tasks change.</figcaption></figure></article>
 <article class="tile t5"><div class="onair"><span>// watch</span></div><h3 style="margin-bottom:6px">Watch their pane live.</h3><p class="sub">They can ask to type; keystrokes run only when you allow them.</p><figure class="clip whip" data-clip="watch" data-sizes="1080,720" style="--ar:2048/1080"><div class="clip-frame"><video width="2048" height="1080" muted playsinline loop preload="none" data-poster="/demos/watch.webp" aria-label="Watching a teammate&#39;s pane (recording)" aria-describedby="watch-cap"></video><button class="clip-toggle" type="button" aria-label="Play">▶</button></div><figcaption id="watch-cap">Ada opens Ben&#39;s Gift cards pane; his Claude Code streams live in her window.</figcaption></figure></article>
 <article class="tile t6"><div class="onair"><span>// request review</span></div><h3 style="margin-bottom:14px">Request Review.</h3><figure class="clip whip" data-clip="team-review" data-sizes="1080,720" style="--ar:2048/1080"><div class="clip-frame"><video width="2048" height="1080" muted playsinline loop preload="none" data-poster="/demos/team-review.webp" aria-label="Request Review (recording)" aria-describedby="team-review-cap"></video><button class="clip-toggle" type="button" aria-label="Play">▶</button></div><figcaption id="team-review-cap">Ada requests Ben&#39;s review; he opens her diff with her agent&#39;s summary.</figcaption></figure></article>
@@ -702,6 +724,7 @@ p{margin:0}
 </div>
 <div class="land-grid">
 <figure class="clip whip" data-clip="land" data-sizes="1080,720" style="--ar:1728/1080"><div class="clip-frame"><video width="1728" height="1080" muted playsinline loop preload="none" data-poster="/demos/land.webp" aria-label="Ready to land and Land All (recording)" aria-describedby="land-cap"></video><button class="clip-toggle" type="button" aria-label="Play">▶</button></div><figcaption id="land-cap">Land All: the Land in this order? confirm, then fetch, land in order, skip Roomier product grid on a theme.css conflict, push main.</figcaption></figure>
+<img class="land-sprig" data-at="7" data-in="land-tl" src="/sprig/happy.webp" width="800" height="800" alt="" loading="lazy" decoding="async">
 </div>
 </div>
 </section>
@@ -783,6 +806,7 @@ teamree status --json</pre><button class="copy" type="button" data-copy="cli-com
 <div class="wrap">
 <h2 class="rise" id="finale-h"><span class=""><span class="w">Your</span> <span class="w">whole</span> <span class="w">team</span></span><br><span class=""><span class="w">ships</span> <span class="w">in</span></span><br><span class=""><span class="w"><em class="a">parallel.</em></span></span></h2>
 </div>
+<img class="finale-sprig" src="/sprig/point.webp" width="800" height="800" alt="" loading="lazy" decoding="async">
 </section>
 
 <section class="endcard" aria-labelledby="end-h">
@@ -793,6 +817,7 @@ teamree status --json</pre><button class="copy" type="button" data-copy="cli-com
 <div class="actions"><a class="pill" href="https://github.com/zero-abd/teamree/releases/latest/download/teamree-mac-universal.dmg"><svg aria-hidden="true"><use href="#apple"/></svg>Download for macOS</a><a class="url" href="https://teamree.us/">teamree.us</a></div>
 <p class="fine">open source · MIT · macOS · v0.8.3</p>
 </div>
+<img class="endcard-sprig" src="/sprig/wave.webp" width="800" height="800" alt="" loading="lazy" decoding="async">
 </div>
 </section>
 </main>
