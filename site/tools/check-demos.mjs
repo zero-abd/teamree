@@ -40,7 +40,19 @@ for (const [figure, id, body] of page.matchAll(slot)) {
 }
 for (const c of clips) if (!placed.has(c.id)) errors.push(`clip "${c.id}" is not placed on the page`)
 
-const html = page.replace(/<!--[\s\S]*?-->/g, '')
+// Comments are cut by index, not regex, so a stray "<!--" cannot survive into the scan.
+const stripComments = (s) => {
+  let out = ''
+  let i = 0
+  for (let a = s.indexOf('<!--'); a !== -1; a = s.indexOf('<!--', i)) {
+    out += s.slice(i, a)
+    const b = s.indexOf('-->', a + 4)
+    if (b === -1) return out
+    i = b + 3
+  }
+  return out + s.slice(i)
+}
+const html = stripComments(page)
 for (const [, path] of html.matchAll(/(?:src|href|poster)="(\/[^"#?]+)"/g)) {
   if (!path.includes('*') && path !== '/' && !existsSync(join(pub, path))) errors.push(`${path} is named but missing`)
 }
