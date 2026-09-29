@@ -1,81 +1,294 @@
 {
   "clips": [
     {
-      "id": "new-task",
-      "file": "demos/new-task.mp4",
-      "poster": "demos/new-task.jpg",
-      "width": 1728,
+      "id": "showreel",
+      "source": "videos/v5/v5.mp4",
+      "poster": "videos/v5/poster.png",
+      "audio": true,
+      "width": 1920,
       "height": 1080,
-      "seconds": 14.8,
-      "bytes": 1186885,
-      "title": "Two agents, one task",
-      "caption": "Type the task once, pick Claude Code and Codex, and each starts in its own worktree with the task as its first prompt."
+      "sizes": [
+        1080,
+        720
+      ],
+      "seconds": 38.7,
+      "crf": [
+        31,
+        44
+      ],
+      "smallPoster": 640
     },
     {
-      "id": "open-anything",
-      "file": "demos/open-anything.mp4",
-      "poster": "demos/open-anything.jpg",
+      "id": "parallel",
+      "source": "clips/masters/02-new-task-3-claude-1-codex.mp4",
+      "poster": "clips/contact/02-new-task-3-claude-1-codex.jpg",
       "width": 1728,
       "height": 1080,
-      "seconds": 13.27,
-      "bytes": 1387106,
-      "title": "Open anything",
-      "caption": "⌘P opens code, rendered Markdown and an image as tabs beside the terminal."
+      "sizes": [
+        1080,
+        720
+      ],
+      "seconds": 19.97
     },
     {
-      "id": "review-and-ship",
-      "file": "demos/review-and-ship.mp4",
-      "poster": "demos/review-and-ship.jpg",
+      "id": "sidebar",
+      "source": "clips/masters/01-hero-dark.mp4",
+      "poster": "clips/contact/01-hero-dark.jpg",
       "width": 1728,
       "height": 1080,
-      "seconds": 14.9,
-      "bytes": 1350970,
-      "title": "Stage, commit, publish, review",
-      "caption": "One hunk staged, then Commit All, Publish branch and Open review from the Changes tab."
+      "sizes": [
+        1080,
+        720
+      ],
+      "seconds": 11.43
     },
     {
-      "id": "every-pane",
-      "file": "demos/every-pane.mp4",
-      "poster": "demos/every-pane.jpg",
+      "id": "all-panes",
+      "source": "clips/masters/09-all-panes-board-and-palette.mp4",
+      "poster": "clips/contact/09-all-panes-board-and-palette.jpg",
       "width": 1728,
       "height": 1080,
-      "seconds": 15.0,
-      "bytes": 1644209,
-      "title": "Every pane at a glance",
-      "caption": "Each pane carries its harness and state; new panes rebalance into a 2×2 grid."
+      "sizes": [
+        720
+      ],
+      "seconds": 14.6
     },
     {
-      "id": "pick-it-back-up",
-      "file": "demos/pick-it-back-up.mp4",
-      "poster": "demos/pick-it-back-up.jpg",
+      "id": "ask",
+      "source": "clips/masters/03c-msg-ask-card-in-pane.mp4",
+      "poster": "clips/contact/03c-msg-ask-card-in-pane.jpg",
       "width": 1728,
       "height": 1080,
-      "seconds": 13.93,
-      "bytes": 1677170,
-      "title": "Quit, relaunch, carry on",
-      "caption": "Recorded shell output stays above a fresh shell; the file tabs return and Codex resumes its conversation."
+      "sizes": [
+        1080,
+        720
+      ],
+      "seconds": 12.2
+    },
+    {
+      "id": "ask-corner",
+      "source": "clips/masters/03b-asking-corner-card.mp4",
+      "poster": "clips/contact/03b-asking-corner-card.jpg",
+      "width": 1728,
+      "height": 1080,
+      "sizes": [
+        720
+      ],
+      "seconds": 11.43
+    },
+    {
+      "id": "panes",
+      "source": "clips/masters/04-split-panes-tabs-rename.mp4",
+      "poster": "clips/contact/04-split-panes-tabs-rename.jpg",
+      "width": 1728,
+      "height": 1080,
+      "sizes": [
+        1080,
+        720
+      ],
+      "seconds": 16.17
+    },
+    {
+      "id": "changes",
+      "source": "clips/masters/05-changes-stage-commit-push.mp4",
+      "poster": "clips/contact/05-changes-stage-commit-push.jpg",
+      "width": 1728,
+      "height": 1080,
+      "sizes": [
+        1080,
+        720
+      ],
+      "seconds": 13.73
+    },
+    {
+      "id": "review",
+      "source": "clips/masters/06-review-line-comment-send-to-agent.mp4",
+      "poster": "clips/contact/06-review-line-comment-send-to-agent.jpg",
+      "width": 1728,
+      "height": 1080,
+      "sizes": [
+        1080,
+        720
+      ],
+      "seconds": 16.33
+    },
+    {
+      "id": "land",
+      "source": "clips/masters/07-ready-to-land-land-all.mp4",
+      "poster": "clips/contact/07-ready-to-land-land-all.jpg",
+      "width": 1728,
+      "height": 1080,
+      "sizes": [
+        1080,
+        720
+      ],
+      "seconds": 16.63
+    },
+    {
+      "id": "team-live",
+      "source": "clips/masters/08a-teamwork-teammate-task-appears-live.mp4",
+      "poster": "clips/contact/08a-teamwork-teammate-task-appears-live.jpg",
+      "width": 2048,
+      "height": 1080,
+      "sizes": [
+        1080,
+        720
+      ],
+      "seconds": 13.5
+    },
+    {
+      "id": "team-review",
+      "source": "clips/masters/08f-teamwork-ada-requests-review.mp4",
+      "poster": "clips/contact/08f-teamwork-ada-requests-review.jpg",
+      "width": 2048,
+      "height": 1080,
+      "sizes": [
+        1080,
+        720
+      ],
+      "seconds": 13.17
+    },
+    {
+      "id": "resume",
+      "source": "clips/masters/12a-ended-agent-card-resume.mp4",
+      "poster": "clips/contact/12a-ended-agent-card-resume.jpg",
+      "width": 1728,
+      "height": 1080,
+      "sizes": [
+        720
+      ],
+      "seconds": 10.97
+    },
+    {
+      "id": "resume-all",
+      "source": "clips/masters/12b-resume-all-after-relaunch.mp4",
+      "poster": "clips/contact/12b-resume-all-after-relaunch.jpg",
+      "width": 1728,
+      "height": 1080,
+      "sizes": [
+        720
+      ],
+      "seconds": 9.03
+    },
+    {
+      "id": "tooltips",
+      "source": "clips/masters/10-hover-tooltips.mp4",
+      "poster": "clips/contact/10-hover-tooltips.jpg",
+      "width": 1728,
+      "height": 1080,
+      "sizes": [
+        720
+      ],
+      "seconds": 18.83,
+      "crf": [
+        22,
+        32
+      ]
+    },
+    {
+      "id": "select",
+      "source": "clips/masters/11-cmd-a-selects-typed-input.mp4",
+      "poster": "clips/contact/11-cmd-a-selects-typed-input.jpg",
+      "width": 1728,
+      "height": 1080,
+      "sizes": [
+        720
+      ],
+      "seconds": 12.23
+    },
+    {
+      "id": "themes",
+      "source": "clips/masters/13-appearance-live-preview.mp4",
+      "poster": "clips/contact/13-appearance-live-preview.jpg",
+      "width": 1728,
+      "height": 1080,
+      "sizes": [
+        720
+      ],
+      "seconds": 11.33
     },
     {
       "id": "cli",
-      "file": "demos/cli.mp4",
-      "poster": "demos/cli.jpg",
+      "source": "clips/masters/14-cli-worktree-create-terminal-list-dark.mp4",
+      "poster": "clips/contact/14-cli-worktree-create-terminal-list-dark.jpg",
       "width": 1728,
       "height": 1080,
-      "seconds": 15.0,
-      "bytes": 936137,
-      "title": "The CLI, from a pane",
-      "caption": "teamree status, worktree list, then worktree create with --agent claude; the new worktree lands in the sidebar."
+      "sizes": [
+        1080,
+        720
+      ],
+      "seconds": 16.17
     },
     {
-      "id": "teamwork",
-      "file": "demos/teamwork.mp4",
-      "poster": "demos/teamwork.jpg",
+      "id": "allow",
+      "source": "clips/masters/03a-asking-in-pane-allow.mp4",
+      "poster": "clips/contact/03a-asking-in-pane-allow.jpg",
       "width": 1728,
       "height": 1080,
-      "seconds": 12.7,
-      "bytes": 1049394,
-      "title": "A teammate in the sidebar",
-      "caption": "Teamwork connected over a relay; a teammate's worktree shows in the sidebar and their dev server opens beside your shell."
+      "sizes": [
+        1080,
+        720
+      ],
+      "seconds": 13.8
+    },
+    {
+      "id": "cmd-click",
+      "source": "clips/masters/16-cmd-click-file-path.mp4",
+      "poster": "clips/contact/16-cmd-click-file-path.jpg",
+      "width": 1728,
+      "height": 1080,
+      "sizes": [
+        1080,
+        720
+      ],
+      "seconds": 8.53
+    },
+    {
+      "id": "online",
+      "source": "clips/masters/08e-teamwork-teammate-comes-online.mp4",
+      "poster": "clips/contact/08e-teamwork-teammate-comes-online.jpg",
+      "width": 1728,
+      "height": 1080,
+      "sizes": [
+        720
+      ],
+      "seconds": 8.3
+    },
+    {
+      "id": "overlap",
+      "source": "clips/masters/08g-teamwork-overlap-chip.mp4",
+      "poster": "clips/contact/08g-teamwork-overlap-chip.jpg",
+      "width": 1728,
+      "height": 1080,
+      "sizes": [
+        1080,
+        720
+      ],
+      "seconds": 9.1
+    },
+    {
+      "id": "watch",
+      "source": "clips/masters/08d-teamwork-watch-teammate-pane.mp4",
+      "poster": "clips/contact/08d-teamwork-watch-teammate-pane.jpg",
+      "width": 2048,
+      "height": 1080,
+      "sizes": [
+        1080,
+        720
+      ],
+      "seconds": 11.17
+    },
+    {
+      "id": "team-comment",
+      "source": "clips/masters/08c-teamwork-review-comment-to-agent.mp4",
+      "poster": "clips/contact/08c-teamwork-review-comment-to-agent.jpg",
+      "width": 2048,
+      "height": 1080,
+      "sizes": [
+        1080,
+        720
+      ],
+      "seconds": 23.43
     }
   ]
 }

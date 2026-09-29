@@ -288,10 +288,7 @@ nobody has watched fail is a gate nobody knows works.
 
 ## The screen captures
 
-The hero clip, the feature clips under `site/public/demos/` and the
-`screenshot.png` fallback were retaken from a `main` build after 0.2.0, in a
-hidden window on a throwaway profile against a small demo repository. The
-`teamwork` clip's teammate is a headless runtime on the same Mac, through a
-local relay; it shows watching a pane, not the consent prompt. `og.png`, `favicon.svg`
-and the icon set are the mark rather than the app, so they never needed
-retaking.
+The clips under `site/public/demos/` come from the studio's clip library, recorded from a v0.8.3 build on
+throwaway profiles with stand-in agents, in Studio dark and light; the teamwork clips are two windows on
+one local relay. `site/tools/encode-demos.mjs` encodes them from their masters. `og.png`, `favicon.svg` and the icon
+set are the mark rather than the app, so they never needed retaking.

@@ -113,6 +113,11 @@ the mark on it, clay hands, drawn in a 1-bit halftone dither. On the site it
 appears as transparent stills (wave, point, talk, grab, happy, worried) beside
 the content, never over footage and never over the hero reel. It is not in the app.
 
+The app keeps its own dark palette (the app icon uses it too): ground `#0B0C0E`,
+tiles `#101114` / `#171718`, ink `#F3F2EE`, body `#C8C7C2`, muted `#A09F9B`,
+hairlines `rgb(243 242 238 / 9%)`, accent `#8B8CF7` on the wordmark's dot, focus
+and links only, and the same state dots.
+
 The mark: unchanged. Clear space half its width; never cropped, never the
 accent, never rotated. The lockup is the mark, the wordmark, and the lavender dot
 on the baseline.
