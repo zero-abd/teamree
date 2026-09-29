@@ -52,10 +52,10 @@ surface states a fact.
 | Site hero h1 | `Your whole team ships in parallel.` |
 | Site hero sub-line | `Every agent in its own git worktree. Every teammate in the same window.` |
 | Site hero buttons | `Download for macOS` · `Source on GitHub` |
-| Site hero note | `Free. macOS 12 or later. Universal build.` |
-| Site section h2 | `A worktree per task` · `A state per pane` · `A CLI agents can drive` · `Teammates in the window` · `Install` |
+| Site hero note | `Free · MIT · macOS · Apple Silicon and Intel` |
+| Site chapter h2 | `Every task gets its own worktree.` · `One sidebar. Every state.` · `When an agent needs you, it asks.` · `Split panes, each with its own tabs.` · `Stage, commit, push.` · `Comments go straight to the agent.` · `Ready to land? Land All.` · `Your team, live in your sidebar.` · `Pick up where it stopped.` · `The small things, handled.` · `A CLI over the same runtime.` · `Installed in a minute.` · `Questions, answered.` |
 | Site meta / og description | `The agentic development environment for teams. Claude Code, Codex and other coding agents shipping side by side, each in its own git worktree, in one window your teammates can watch.` |
-| og card | h1 `Your whole team ships in parallel.` — line `Every agent in its own git worktree. Every teammate in the same window.` — foot `teamree.us` |
+| og card | h1 `Your whole team ships in parallel.` — line `Every agent in its own git worktree. Every teammate in the same window.` — status strip, Sprig — foot `teamree.us · free · MIT · macOS universal` |
 | README first line | `**Your whole team ships in parallel.**` then the sub-line |
 | `package.json` description | `Your whole team ships in parallel. Every agent in its own git worktree. Every teammate in the same window.` |
 | GitHub repo description | `Your whole team ships in parallel.` |
@@ -73,7 +73,7 @@ surface states a fact.
 
 ## Visual system
 
-Palette (light on dark; no light theme on the site):
+The app, the icon and dark surfaces (the site has its own paper system, below):
 
 | Token | Hex | Use |
 | --- | --- | --- |
@@ -90,33 +90,34 @@ Palette (light on dark; no light theme on the site):
 | `--finished` | `#57c38a` | state dot |
 | `--failed` | `#e8615a` | state dot |
 
-The accent is spent in three places on the page: the wordmark's dot, focus, and
-links. Not on buttons, not on backgrounds, not on headings.
+In the app the accent is spent on the wordmark's dot, focus and links. Not on
+buttons, not on backgrounds, not on headings.
 
-Type: the system face (`-apple-system, BlinkMacSystemFont, "SF Pro Text",
-"Helvetica Neue", Arial, sans-serif`) for everything; `ui-monospace, "SF Mono",
-Menlo, monospace` for commands, paths and agent names. Nothing downloaded.
+### The site (teamree.us)
 
-| Role | Size / line / tracking / weight |
-| --- | --- |
-| h1 | `clamp(40px, 2.2rem + 2.4vw, 64px)` / 1.05 / -0.03em / 600 |
-| h2 | 28px / 1.2 / -0.02em / 600 |
-| h3 | 20px / 1.3 / -0.015em / 600 |
-| lede | 20px / 1.5 / 0 / 400, `--ink-2` |
-| body | 17px / 1.6 / 0 / 400, `--ink-2` |
-| small | 15px / 1.5 / 0 / 400, `--muted` |
-| code | 13px / 1.75, mono |
+Editorial paper and ink with one violet, set like a motion designer's working file.
 
-Spacing on an 8px grid: sections 96px apart (64px under 900px), 32px between a
-heading and its media, 24px gutters, content column 1120px, page padding 32px
-(20px on phones). Radius: 6px controls, 10px buttons and chips, 14px window
-frames, 999px the header pill.
+| Token | Hex | Use |
+| --- | --- | --- |
+| `--paper` | `#FDFDFB` | ground, with a fixed 48px hairline grid |
+| `--ink` | `#0B0C0E` | text, buttons, dark chapters |
+| `--accent` | `#8B8CF7` | the land chapter's flood, echoes, decorative dots |
+| `--accent-ink` | `#5051C5` | the italic accent word and small accent text on paper (≥ 4.5:1) |
+| `--muted` | `#5E6065` | captions, chrome, inactive states (never dim text with opacity) |
+| state dots | as in the app | working, asking, ready, failed, ended; Sprig's leaves use them too |
 
-Background: not flat. Two layers on `--ground`, both fixed, both under everything:
-a radial vignette from the tile tone, `radial-gradient(ellipse 70% 50% at 50% 0,
-#15161A, #0B0C0E 70%)`, and a 48px grid of `rgb(243 242 238 / 3%)` hairlines,
-masked with `linear-gradient(#000 0, transparent 900px)` so it fades out under
-the product shot. No noise, no glow, no animated gradient.
+Type: two voices, both system faces, nothing downloaded. A bold grotesk (`-apple-system … "SF Pro Display"`,
+tight -0.06em tracking) for headlines and body, and one italic serif word per headline (`ui-serif, "New York"`)
+in `--accent-ink` with a hand-drawn underline. Mono (`ui-monospace, "SF Mono"`) is chrome only: `// 0N — name`
+chapter labels, the vertical `00:00:SS:FF` timecodes, `fig. NN` captions, commands and agent names.
+
+Motion: headline words rise out of a baseline mask (expo-out, no overshoot); clips whip in with hard echo
+outlines, not blur; explainers run on short step timelines while on screen; floods are scroll-linked circles
+that grow from an object (a status dot, the Land All button). Something always moves (clock, timecodes,
+marquee, Sprig) and nothing moves under `prefers-reduced-motion`.
+
+Sprig, the character from the showreels, is rendered in the studio (never redrawn by hand), stands on paper
+only, and never overlaps the lockup.
 
 The mark:
 
@@ -141,60 +142,11 @@ The mark:
 
 ## Page blueprint
 
-Header. At scroll 0: full width, flush, 60px tall, transparent over the
-vignette: lockup on the left, `Worktrees · Panes · Teamwork · Install` and a
-`GitHub` button on the right. Past 32px of scroll it becomes a fixed, centred
-pill (back below 8px): 48px tall, 12px from the top, at most 760px wide, `--tile`
-at 80% over `backdrop-filter: blur(16px)`, one `--line` border, radius 999px,
-holding the same lockup, links and button. The row never resizes: the lockup
-and links translate inward while the pill fades in and narrows from the row's
-width with its edges riding on them, all in one 640ms `cubic-bezier(.2,.8,.2,1)`
-that a reversed scroll reverses mid-flight. Under `prefers-reduced-motion` the
-contents switch at once and the pill cross-fades in 200ms. On phones both states hold the lockup and a `Menu` disclosure; the
-pill is 48px tall and spans the width less 16px each side.
+The site's blueprint lives in `site/README.md` and the page itself: a hero (h1, sub-line, the two buttons, the
+note, the showreel slot with a status strip), the agent-CLI marquee, thirteen chapters `// 01`–`// 13` (each a
+headline, one or two facts, real v0.8.3 footage and, where the footage cannot show it, a drawn explainer), the
+install steps beside a drawn macOS dialog, the FAQ, an end card, and the footer (`GitHub · Releases · MIT
+licence · Install guide · Trying teamwork · Roadmap`, `macOS. Universal. Free.`).
 
-Footer. One row: the lockup on its tile at the left; `Source · Releases · MIT ·
-Installing · Trying teamwork · Roadmap` at the right; under it, in `--muted`,
-`macOS. Universal. Free.` No slogan.
-
-Sections, in order, six at most:
-
-1. **Hero.** Mark, h1, sub-line, the two buttons, the note. Under it the product
-   shot: `screenshot.png` in a window frame (a `--tile` mat, 6px, radius 14px,
-   three traffic-light dots drawn in `--line`), aspect 1400 / 900. The frame is
-   `data-media="tour"` and holds the showcase clip slot with `screenshot.png`
-   as its poster; the frame never resizes when a clip swaps in.
-2. **A worktree per task.** h2, one line: `Start from any ref. Attempts never
-   see each other's files; abandoning one is deleting a directory.` Clip slot
-   `data-demo="open-anything"`. A second row, media on the left, h3 `Changes open
-   beside panes`: `The diff opens beside the panes. Stage or discard a hunk,
-   commit, publish the branch, then open its review on the forge.` Clip slot
-   `data-demo="review-and-ship"`.
-3. **A state per pane.** h2, one line: `Working, waiting, finished or failed,
-   read off the PTY. One view lists every pane, failures first.` Beside it the
-   four dots with their words, in the app's colours. Then: `Split terminals,
-   nested, a real PTY in each. Finds claude, codex, gemini, opencode and droid on
-   your PATH.` Clip slot `data-demo="every-pane"`. A second row, media on
-   the left, h3 `Pane history survives relaunch`: `Quit and relaunch: file tabs
-   and shell scrollback come back, each shell starts fresh, and an agent with a
-   conversation resumes it.` Clip slot `data-demo="pick-it-back-up"`.
-4. **A CLI agents can drive.** h2, one line: `Create worktrees, run commands and
-   read output over a local socket. Every command takes --json.` A four-line
-   command block, mono, with a Copy button. Clip slot `data-demo="cli"`.
-5. **Teammates in the window.** h2, one line: `Add a teammate's key and they
-   can watch your panes and ask to type; keystrokes run only when you allow
-   them.` Link: `Trying teamwork`. Clip slot `data-demo="teamwork"`.
-6. **Install.** h2. `Free, macOS 12 or later, signed ad-hoc. macOS refuses the
-   first launch: press Done, not Move to Trash, then clear the flag.` The
-   quarantine command and the checksum command, each with Copy. Link:
-   `docs/install.md`.
-
-A section holds at most two rows; the second is `.section-row.reverse`, media
-left and copy right above 900px, copy first below it, 80px under the first (48px
-under 900px).
-
-Clip slots keep the `site/tools/sync-demos.mjs` contract exactly: the
-`demo:video:parked` comments, `data-demo` ids, `width`/`height` on each
-`<video>`, the `.demo-frame::before` padding, and a `figcaption.demo-cap`. A
-clip plays only while on screen, never under reduced motion, and never loops
-on its own; nothing on the page loops.
+Clip slots keep the `site/tools/check-demos.mjs` contract: `data-clip`, `data-sizes`, `width`/`height` and a
+poster on each `<video>`, and a `figcaption`. A clip plays only while on screen and never under reduced motion.

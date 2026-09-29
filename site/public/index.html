@@ -1,445 +1,1160 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta charset="utf-8"><script>document.documentElement.classList.add('js')</script><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>teamree — your whole team ships in parallel</title>
 <meta name="description" content="The agentic development environment for teams. Claude Code, Codex and other coding agents shipping side by side, each in its own git worktree, in one window your teammates can watch.">
-<meta name="color-scheme" content="dark">
-<meta name="theme-color" content="#0B0C0E">
-<link rel="canonical" href="https://teamree.us/">
-<link rel="icon" href="/favicon.svg" type="image/svg+xml">
-<link rel="icon" href="/icon-32.png" sizes="32x32" type="image/png">
-<link rel="icon" href="/icon-192.png" sizes="192x192" type="image/png">
-<link rel="icon" href="/icon-256.png" sizes="256x256" type="image/png">
-<link rel="icon" href="/icon-512.png" sizes="512x512" type="image/png">
-<link rel="apple-touch-icon" href="/apple-touch-icon.png">
-<meta property="og:type" content="website">
-<meta property="og:url" content="https://teamree.us/">
-<meta property="og:site_name" content="teamree">
-<meta property="og:title" content="teamree — your whole team ships in parallel">
-<meta property="og:description" content="The agentic development environment for teams. Claude Code, Codex and other coding agents shipping side by side, each in its own git worktree, in one window your teammates can watch.">
-<meta property="og:image" content="https://teamree.us/og.png">
-<meta property="og:image:width" content="1200">
-<meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="Your whole team ships in parallel.">
-<meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="teamree — your whole team ships in parallel">
-<meta name="twitter:description" content="The agentic development environment for teams. Claude Code, Codex and other coding agents shipping side by side, each in its own git worktree, in one window your teammates can watch.">
-<meta name="twitter:image" content="https://teamree.us/og.png">
+<link rel="canonical" href="https://teamree.us/"><meta name="theme-color" content="#FDFDFB"><meta name="color-scheme" content="light">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="icon" href="/icon-32.png" sizes="32x32" type="image/png"><link rel="icon" href="/icon-192.png" sizes="192x192" type="image/png"><link rel="icon" href="/icon-256.png" sizes="256x256" type="image/png"><link rel="icon" href="/icon-512.png" sizes="512x512" type="image/png"><link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta property="og:type" content="website"><meta property="og:url" content="https://teamree.us/"><meta property="og:site_name" content="teamree"><meta property="og:title" content="teamree — your whole team ships in parallel"><meta property="og:description" content="The agentic development environment for teams. Claude Code, Codex and other coding agents shipping side by side, each in its own git worktree, in one window your teammates can watch."><meta property="og:image" content="https://teamree.us/og.png"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta property="og:image:alt" content="Your whole team ships in parallel.">
+<meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="teamree — your whole team ships in parallel"><meta name="twitter:description" content="The agentic development environment for teams. Claude Code, Codex and other coding agents shipping side by side, each in its own git worktree, in one window your teammates can watch."><meta name="twitter:image" content="https://teamree.us/og.png"><meta name="twitter:image:alt" content="Your whole team ships in parallel.">
+<link rel="preload" as="image" href="/demos/showreel.webp" imagesrcset="/demos/showreel-640.webp 640w, /demos/showreel.webp 1280w" imagesizes="(max-width: 900px) 100vw, 60vw" fetchpriority="high">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","name":"teamree","url":"https://teamree.us/","description":"The agentic development environment for teams.","operatingSystem":"macOS","applicationCategory":"DeveloperApplication","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"license":"https://github.com/zero-abd/teamree/blob/main/LICENSE","softwareVersion":"0.8.3","downloadUrl":"https://github.com/zero-abd/teamree/releases/latest/download/teamree-mac-universal.dmg"}</script>
 <style>
-/* Tokens */
-:root{--ground:#0B0C0E;--tile:#101114;--tile-2:#171718;--ink:#F3F2EE;--ink-2:#C8C7C2;--muted:#A09F9B;--line:rgb(243 242 238 / 9%);--line-hover:rgb(243 242 238 / 16%);--accent:#8b8cf7;--link:#A9AAFF;--working:#9e9ef8;--waiting:#d6a24a;--finished:#57c38a;--failed:#e8615a;--font:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",Arial,sans-serif;--mono:ui-monospace,"SF Mono",Menlo,monospace;--spring:cubic-bezier(.2,0,0,1);--spring:linear(0,.05,.17,.34,.52,.68,.81,.91,.98,1.02,1.04,1.045,1.04,1.03,1.02,1.01,1);--gather:640ms cubic-bezier(.2,.8,.2,1);}
+:root{--paper:#fdfdfb;--ink:#0b0c0e;--muted:#5e6065;--line:#d9d9d4;--accent:#8b8cf7;--accent-ink:#5051c5;--tile:#f3f3ef;--dark:#0b0c0e;--dark-tile:#101114;--light:#f3f2ee;--dark-muted:#a7a8ad;--working:#9e9ef8;--asking:#d6a24a;--ready:#57c38a;--failed:#e8615a;--ended:#85878b;--sans:-apple-system,BlinkMacSystemFont,"SF Pro Display","Helvetica Neue",Arial,sans-serif;--serif:ui-serif,"New York","Iowan Old Style",Georgia,serif;--mono:ui-monospace,"SF Mono",Menlo,monospace;--expo:cubic-bezier(.16,1,.3,1);--gutter:48px}
+*,*:before,*:after{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:76px;color-scheme:light}
+body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.55 var(--sans);overflow-x:hidden;-webkit-font-smoothing:antialiased}
+body:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;background-image:linear-gradient(#0b0c0e0b 1px,transparent 1px),linear-gradient(90deg,#0b0c0e0b 1px,transparent 1px);background-size:48px 48px}
+a{color:inherit;text-underline-offset:3px}
+button{font:inherit;color:inherit}
+code{font:.9em var(--mono)}
+:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+.skip{position:fixed;left:12px;top:-60px;z-index:100;background:var(--ink);color:#fff;padding:10px 14px}
+.skip:focus{top:12px}
+.defs{position:absolute;width:0;height:0;overflow:hidden}
+.wrap{width:min(1180px,calc(100% - var(--gutter)));margin:auto;position:relative}
+.intro>*,.parallel-grid>*,.sidebar-bento>*,.ask-grid>*,.cli-grid>*,.install-grid>*,.land-grid>*,.team-clips>*,.resume-grid>*,.final-grid>*,.bento>*,.hero>.wrap>*,.relay>*{min-width:0}
 
-/* Base */
-*,*::before,*::after{box-sizing:border-box;}
-html{background:var(--ground);scroll-padding-top:80px;-webkit-text-size-adjust:100%;}
-body{position:relative;isolation:isolate;margin:0;color:var(--ink);font-family:var(--font);font-size:17px;line-height:1.6;-webkit-font-smoothing:antialiased;background:radial-gradient(ellipse 70% 50% at 50% 0,#15161A,#0B0C0E 70%);background-attachment:fixed;}
-body::before{content:"";position:fixed;z-index:-1;inset:0;pointer-events:none;background-image:linear-gradient(rgb(243 242 238 / 3%) 1px,transparent 1px),linear-gradient(90deg,rgb(243 242 238 / 3%) 1px,transparent 1px);background-size:48px 48px;mask-image:linear-gradient(#000 0,transparent 900px);-webkit-mask-image:linear-gradient(#000 0,transparent 900px);}
-a{color:var(--link);text-underline-offset:3px;}
-a:hover{text-decoration-thickness:2px;}
-:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:6px;}
-img{display:block;max-width:100%;}
-h1,h2{margin:0;font-weight:600;}
-h1{font-size:clamp(40px,2.2rem + 2.4vw,64px);line-height:1.05;letter-spacing:-.03em;}
-h2{font-size:28px;line-height:1.2;letter-spacing:-.02em;}
-p,figure{margin:0;}
-pre{max-width:100%;overflow-x:auto;}
-.wrap{width:min(100% - 64px,1120px);margin-inline:auto;}
-.skip{position:fixed;z-index:1000;left:16px;top:-80px;padding:10px 14px;background:var(--ink);color:var(--ground);border-radius:6px;}
-.skip:focus{top:10px;}
-.svg-defs{position:absolute;width:0;height:0;overflow:hidden;}
-.lockup{display:inline-flex;align-items:center;gap:8px;color:var(--ink);text-decoration:none;white-space:nowrap;}
-.lockup-tile{display:grid;place-items:center;width:28px;height:28px;border-radius:7px;background:var(--tile-2);flex:none;}
-.lockup-tile svg{width:62%;height:62%;}
-.lockup-name{display:flex;align-items:flex-end;gap:4px;}
-.lockup-word{width:78px;height:20px;overflow:visible;}
-.lockup-dot{width:4px;height:4px;border-radius:50%;background:var(--accent);margin-bottom:3px;flex:none;}
+/* lockup */
+.lockup{display:inline-flex;align-items:center;gap:8px;text-decoration:none;color:inherit}
+.lockup-tile{display:grid;place-items:center;width:28px;height:28px;border:1px solid currentColor;border-radius:6px}
+.lockup-tile svg{width:18px;height:18px}
+.lockup-name{display:flex;align-items:flex-end;gap:4px}
+.lockup-word{width:74px;height:20px}
+.lockup-dot{width:4px;height:4px;background:var(--accent);border-radius:50%;margin-bottom:3px}
 
-/* Header and pill */
-/* The row never resizes: its contents glide inward by --gather-x while the pill material settles in around them. */
-.site-header{position:fixed;z-index:100;top:0;left:0;width:100%;height:60px;display:flex;justify-content:center;pointer-events:none;container-type:inline-size;}
-.header-row{--wide:min(100cqw - 36px,1148px);--narrow:min(100cqw - 32px,760px);--gather-x:calc((var(--wide) - var(--narrow)) / 2);position:relative;isolation:isolate;height:60px;width:var(--wide);flex:none;padding:0 14px;display:flex;align-items:center;justify-content:space-between;gap:20px;transition:translate var(--gather);}
-.header-row>*{pointer-events:auto;transition:translate var(--gather);}
-.header-row::before{content:"";position:absolute;z-index:-1;inset:6px var(--gather-x);border:1px solid var(--line);border-radius:999px;background:rgb(16 17 20 / 80%);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);pointer-events:auto;opacity:0;scale:var(--gather-s,1.05) 1;transition:opacity var(--gather),scale var(--gather);}
-.site-header.scrolled .header-row{translate:0 6px;}
-.site-header.scrolled .lockup{translate:var(--gather-x) 0;}
-.site-header.scrolled .nav{translate:calc(-1 * var(--gather-x)) 0;}
-.site-header.scrolled .header-row::before{opacity:1;scale:1;}
-.nav{display:flex;align-items:center;gap:22px;font-size:15px;}
-.nav a{color:var(--ink-2);text-decoration:none;min-height:44px;display:inline-flex;align-items:center;}
-.nav a:hover{color:var(--ink);}
-.github{padding:0 14px;border:1px solid var(--line);border-radius:10px;color:var(--ink)!important;}
-.github:hover{border-color:var(--line-hover);}
-.nav-toggle{display:none;color:var(--ink-2);min-width:44px;min-height:44px;align-items:center;justify-content:center;text-decoration:none;}
+/* header */
+.site-header{position:sticky;top:0;z-index:50;border-bottom:1px solid #0b0c0e18;background:#fdfdfbe6;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}
+.header-inner{height:64px;display:flex;align-items:center;gap:24px}
+.timecode{font:10px var(--mono);color:var(--muted);letter-spacing:.04em;font-variant-numeric:tabular-nums}
+.nav{margin-left:auto;display:flex;align-items:center;gap:22px;font-size:13px}
+.nav a{text-decoration:none}
+.nav a:not(.button):hover{text-decoration:underline}
+.nav-toggle{display:none;margin-left:auto;border:1px solid var(--ink);background:transparent;min-height:44px;padding:0 14px;border-radius:5px;cursor:pointer}
+.button{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:0 18px;border:1px solid var(--ink);background:var(--ink);color:#fff;text-decoration:none;font-weight:650;border-radius:6px;transition:transform .2s var(--expo),box-shadow .2s var(--expo);cursor:pointer}
+.button:hover{transform:translateY(-2px);box-shadow:0 6px 0 -2px var(--accent)}
+.button.ghost{background:transparent;color:var(--ink)}
+.button.small{min-height:36px;padding:0 14px;font-size:13px}
 
-/* Hero */
-.hero{padding:156px 0 96px;}
-.hero-title{display:flex;align-items:flex-start;gap:.35em;font-size:clamp(40px,2.2rem + 2.4vw,64px);}
-.hero-mark{width:2.2em;height:2.2em;margin-top:-.08em;flex:none;color:var(--ink);overflow:visible;}
-.hero h1{font-size:1em;}
-.lede{margin-top:24px;max-width:62ch;font-size:20px;line-height:1.5;color:var(--ink-2);}
-.cta{display:flex;align-items:center;flex-wrap:wrap;gap:12px;margin-top:32px;}
-.button{display:inline-flex;align-items:center;justify-content:center;min-height:48px;padding:0 18px;border:1px solid var(--line-hover);border-radius:10px;background:var(--ink);color:var(--ground);font-size:15px;font-weight:600;text-decoration:none;transition:transform 320ms var(--spring);}
-.button.secondary{background:var(--tile);color:var(--ink);}
-.button:hover{text-decoration:none;}
-.button:active,.cmd-copy:active{transform:scale(.97);}
-.hero-note{margin-top:14px;color:var(--muted);font-size:15px;line-height:1.5;}
+/* type */
+.chapter,.eyebrow{font:11px var(--mono);letter-spacing:.06em}
+h1,h2{margin:18px 0 0;font-weight:750;line-height:.92;letter-spacing:-.06em}
+h1{font-size:clamp(54px,5.8vw,88px);max-width:9ch}
+h2{font-size:clamp(42px,5.6vw,78px);max-width:12ch}
+h3{margin:0;font-size:20px;letter-spacing:-.02em}
+.accent{font-family:var(--serif);font-weight:400;font-style:italic;color:var(--accent-ink);letter-spacing:-.04em;white-space:nowrap;position:relative;display:inline-block;padding-right:.06em}
+.accent:after{content:"";position:absolute;left:3%;right:4%;bottom:-.02em;height:.06em;min-height:2px;background:currentColor;border-radius:2px;transform:scaleX(0) rotate(-1.2deg);transform-origin:left}
+.in .accent:after,.accent.in:after{animation:underline .6s .5s var(--expo) forwards}
+.lede{font-size:clamp(17px,1.5vw,21px);max-width:36ch;margin:24px 0 0}
+.body{font-size:18px;max-width:46ch}
+.body p{margin:0 0 14px}
+.fine{font:11px var(--mono);color:var(--muted);margin:14px 0 0}
+.dark{background:var(--dark);color:var(--light)}
+.dark .chapter,.dark .fine,.dark figcaption,.dark .tc{color:var(--dark-muted)}
+.dark .accent{color:#b5b5ff}
 
-/* Product shot */
-.shot{margin-top:56px;padding:6px;border:1px solid var(--line);border-radius:14px;background:var(--tile);}
-.shot-bar{height:24px;display:flex;align-items:center;gap:6px;padding-left:6px;}
-.shot-bar i{width:8px;height:8px;border-radius:50%;background:var(--line-hover);}
-.shot-frame{position:relative;aspect-ratio:1728/1080;overflow:hidden;border-radius:8px;background:var(--ground);}
-.shot-frame>video,.shot-frame>img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;}
+/* word rise */
+.reveal .w{display:inline-block;overflow:hidden;vertical-align:bottom;padding:.1em .02em .16em 0;margin:-.1em -.02em -.16em 0}
+.reveal .w>i{display:inline-block;font-style:inherit}
+.js .reveal .w>i{transform:translateY(112%)}
+.reveal.in .w>i{animation:rise .6s var(--expo) forwards}
+.reveal.in .w:nth-of-type(2)>i{animation-delay:.07s}
+.reveal.in .w:nth-of-type(3)>i{animation-delay:.14s}
+.reveal.in .w:nth-of-type(4)>i{animation-delay:.21s}
+.reveal.in .w.accent>i{animation:rise-roll .75s .26s var(--expo) forwards}
 
-/* Sections */
-.section{padding:96px 0;border-top:1px solid var(--line);}
-.section-row{display:grid;grid-template-columns:minmax(0,380px) minmax(0,1fr);gap:64px;align-items:start;}
-.section-row>*{min-width:0;}
-.section-row+.section-row{margin-top:80px;}
-.section-row.reverse{grid-template-columns:minmax(0,1fr) minmax(0,380px);}
-.section-row.reverse .section-copy{grid-column:2;}
-.section-row.reverse .demo-figure{grid-column:1;grid-row:1;}
-h3{margin:0;font-size:20px;line-height:1.3;letter-spacing:-.015em;font-weight:600;}
-.section-copy{min-width:0;}
-.section-copy p{margin-top:18px;color:var(--ink-2);}
-.section-copy p:first-of-type{margin-top:16px;}
-.state-list{list-style:none;display:flex;flex-wrap:wrap;gap:10px 18px;margin:20px 0 0;padding:0;color:var(--ink-2);font-size:15px;}
-.state-list li{display:flex;align-items:center;gap:8px;}
-.state-list i{width:8px;height:8px;border-radius:50%;}
-.working{background:var(--working);}
-.waiting{background:var(--waiting);}
-.finished{background:var(--finished);}
-.failed{background:var(--failed);}
-code,pre{font-family:var(--mono);}
-p code{font-size:.9em;color:var(--ink);background:var(--tile-2);padding:2px 5px;border-radius:6px;}
-.cmd{position:relative;min-width:0;margin-top:20px;border:1px solid var(--line);border-radius:10px;background:var(--tile);padding:16px 88px 16px 18px;max-width:100%;overflow:hidden;}
-.cmd pre{margin:0;max-width:100%;overflow-x:auto;color:var(--ink);font-size:13px;line-height:1.75;white-space:pre;}
-.cmd-copy{position:absolute;right:8px;top:8px;min-height:36px;padding:0 12px;border:1px solid var(--line-hover);border-radius:6px;background:var(--tile-2);color:var(--ink-2);font:500 13px var(--font);cursor:pointer;transition:transform 320ms var(--spring);}
-.text-link{display:inline-block;margin-top:18px;}
+/* hero */
+.hero{overflow:clip;min-height:calc(100svh - 64px);display:grid;align-items:center;padding:clamp(24px,4vh,48px) 0 28px}
+.hero>.wrap{width:min(1280px,calc(100% - var(--gutter)));display:grid;grid-template-columns:minmax(380px,.8fr) minmax(0,1.2fr);gap:clamp(28px,4vw,64px);align-items:center}
+.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:28px}
+.stage{position:relative;padding-top:92px}
+.hero-sprig{position:absolute;right:4%;top:0;width:170px;height:auto;aspect-ratio:600/750;mix-blend-mode:multiply;pointer-events:none;z-index:1}
+.stage .clip{position:relative;z-index:2;margin:0}
+.statusbar{position:relative;z-index:3;display:flex;flex-wrap:wrap;gap:6px 18px;align-items:center;margin-top:10px;padding:9px 13px;border:1px solid var(--line);background:#fff;font:11px var(--mono);font-variant-numeric:tabular-nums}
+.statusbar .sb-end{margin-left:auto;color:var(--muted)}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:7px;vertical-align:1px;flex:none}
+.d-working{background:var(--working)}
+.d-asking{background:var(--asking)}
+.d-ready{background:var(--ready)}
+.d-failed{background:var(--failed)}
+.d-ended{background:var(--ended)}
+.pulse{animation:pulse 1.6s ease-in-out infinite}
 
-/* Clips */
-.demo-figure{min-width:0;}
-.demo-frame{position:relative;border:1px solid var(--line);border-radius:14px;overflow:hidden;background:var(--tile);}
-.demo-frame::before{content:"";display:block;padding-top:62.5%;}
-.demo-frame>video,.demo-frame>img,.demo-frame>.demo-pending{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;}
-.demo-pending{overflow:hidden;}
-.demo-pending img{position:absolute;width:190%;height:auto;max-width:none;}
-[data-demo="every-pane"] .demo-pending img{width:286%;left:0;top:-65%;}
-[data-demo="cli"] .demo-pending img{width:182%;left:-82%;top:-11%;}
-[data-demo="teamwork"] .demo-pending img{width:286%;left:0;top:-12%;}
-.demo-cap{margin-top:10px;color:var(--muted);font-size:15px;line-height:1.5;}
-.demo-play{position:absolute;left:50%;top:50%;translate:-50% -50%;display:grid;place-items:center;width:60px;height:60px;border-radius:50%;border:1px solid var(--line-hover);background:rgb(11 12 14 / 72%);cursor:pointer;}
-.demo-play svg{width:20px;fill:var(--ink);}
-[data-paused="no"] .demo-play{opacity:.25;}
-[data-paused="no"] .demo-play:hover,[data-paused="no"] .demo-play:focus-visible{opacity:1;}
+/* agents strip */
+.agents{border-block:1px solid var(--line);padding:16px 0;overflow:hidden;background:#fff}
+.agents-label{text-align:center;font:11px var(--mono);margin:0 0 10px}
+.marquee{display:flex;width:max-content;gap:30px;font:14px var(--mono);animation:marquee 34s linear infinite}
+.marquee span:before{content:"› ";color:var(--accent-ink)}
 
-/* Install */
-#install .section-row>div{min-width:0;}
+/* sections */
+.section{position:relative;padding:clamp(88px,9vw,132px) 0;overflow:clip}
+.section+.section:not(.dark):not(.flood){border-top:1px solid var(--line)}
+.dark+.dark{padding-top:0}
+.intro{display:grid;grid-template-columns:1fr .75fr;gap:clamp(28px,5vw,70px);align-items:end}
+.tc{position:absolute;right:-30px;top:0;writing-mode:vertical-rl;font:10px var(--mono);color:var(--muted);letter-spacing:.06em;font-variant-numeric:tabular-nums;white-space:nowrap}
+.tc b{font-weight:400}
 
-/* Footer */
-.site-footer{padding:48px 0;border-top:1px solid var(--line);font-size:15px;}
-.footer-row{display:flex;align-items:center;justify-content:space-between;gap:24px;}
-.footer-row>*{min-width:0;}
-.footer-links{display:flex;flex-wrap:wrap;gap:8px 22px;}
-.footer-links a{color:var(--ink-2);}
-.footer-note{margin-top:14px;color:var(--muted);}
+/* clips */
+.clip{margin:0}
+.clip-frame{position:relative;overflow:hidden;aspect-ratio:var(--ar);border:1px solid #0b0c0e33;border-radius:10px;background:#16171a}
+.clip-frame video,.clip-frame>.poster{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.clip-frame video{z-index:1}
+.clip-toggle,.sound{position:absolute;bottom:12px;z-index:3;min-width:44px;min-height:44px;border:1px solid #ffffff55;background:#0b0c0ed9;color:#fff;cursor:pointer;font:13px var(--sans)}
+.clip-toggle{right:12px;border-radius:50%}
+.sound{left:12px;padding:0 14px;border-radius:6px}
+.clip-toggle[hidden],.sound[hidden]{display:none}
+.clip figcaption{margin-top:9px;color:var(--muted);font-size:13px}
+.dark .clip-frame{border-color:#ffffff2b}
+.hero .clip-frame video::cue{visibility:hidden}
+.sound-on .clip-frame video::cue{visibility:visible}
 
-/* Responsive layout */
-@media(max-width:900px){
-  .wrap{width:min(100% - 40px,1120px);}
-  .nav{display:none;position:absolute;top:56px;left:0;width:100%;padding:12px 20px 18px;flex-direction:column;align-items:stretch;gap:0;border:1px solid var(--line);border-radius:14px;background:var(--tile);}
-  .nav a{min-height:48px;}
-  .nav:target,.site-header[data-nav="open"] .nav{display:flex;}
-  .nav-toggle{display:inline-flex;}
-  .header-row,.site-header.scrolled .header-row{--wide:calc(100cqw - 32px);--narrow:var(--wide);height:48px;translate:0 8px;}
-  .site-header .header-row::before{inset:0;opacity:1;scale:1;}
-  .hero{padding:120px 0 64px;}
-  .hero-title{display:block;}
-  .hero-mark{display:block;width:56px;height:56px;margin:0 0 24px;}
-  .hero h1{max-width:12ch;}
-  .section{padding:64px 0;}
-  .section-row{grid-template-columns:minmax(0,1fr);gap:32px;}
-  .section-row+.section-row{margin-top:48px;}
-  .section-row.reverse{grid-template-columns:minmax(0,1fr);}
-  .section-row.reverse .section-copy{grid-column:1;grid-row:1;}
-  .section-row.reverse .demo-figure{grid-column:1;grid-row:2;}
-  .footer-row{align-items:flex-start;flex-direction:column;}
+/* whip entry with hard echo outlines */
+.whip{position:relative}
+.js .whip:not(.in){opacity:0;transform:translateX(42px)}
+.whip:before,.whip:after,.whip>.echo{content:"";position:absolute;left:0;right:0;top:0;aspect-ratio:var(--ar);display:block;border:1px solid currentColor;border-radius:10px;opacity:0;pointer-events:none}
+.whip.in{animation:whip .42s var(--expo) forwards}
+.whip.in:before{animation:echo .42s var(--expo) forwards}
+.whip.in:after{animation:echo .42s .05s var(--expo) forwards}
+.whip.in>.echo{animation:echo .42s .1s var(--expo) forwards}
+
+/* 01 parallel */
+.parallel-grid{display:grid;grid-template-columns:1.45fr .55fr;gap:18px;margin-top:48px;align-items:stretch}
+.fan{border:1px solid var(--line);background:#fff;border-radius:10px;padding:18px 18px 14px;display:flex;flex-direction:column;justify-content:space-between;gap:12px}
+.fan svg{width:100%;height:auto;display:block;overflow:visible}
+.fan .br{fill:none;stroke:var(--ink);stroke-width:1.6}
+.fan .main{stroke:var(--ink);stroke-width:4;stroke-linecap:round}
+.fan text{font:11px var(--mono);fill:var(--ink)}
+.fan .lbl{fill:var(--muted)}
+.fan-legend{list-style:none;margin:0;padding:0;font:11px/1.9 var(--mono)}
+.fan-legend li{display:flex;align-items:center;justify-content:space-between;border-top:1px solid var(--line)}
+.fan-legend b{font-weight:400;color:var(--muted)}
+
+/* 02 sidebar */
+.sidebar-bento{display:grid;grid-template-columns:1.6fr .5fr .85fr;gap:14px;margin-top:48px;align-items:start}
+.states{display:grid;gap:8px}
+.state{display:flex;align-items:center;justify-content:space-between;border:1px solid #ffffff25;background:var(--dark-tile);padding:12px 14px;border-radius:8px;font:11px var(--mono)}
+.state b{font:700 22px var(--sans);font-variant-numeric:tabular-nums}
+
+/* 03 asking */
+.cmd{position:relative;margin-top:20px;background:#101114;color:#f3f2ee;border:1px solid #ffffff2b;border-radius:8px;padding:18px 96px 18px 18px}
+.cmd pre{margin:0;font:13px/1.7 var(--mono);white-space:pre;overflow-x:auto;scrollbar-width:thin}
+.copy{position:absolute;right:10px;top:10px;min-height:36px;padding:0 12px;border:1px solid #ffffff44;background:#202126;color:#fff;border-radius:5px;cursor:pointer;font-size:13px}
+.ask-grid{display:grid;grid-template-columns:1.25fr .75fr;grid-template-rows:auto 1fr;gap:18px;margin-top:48px;align-items:start}
+.ask-grid>.clip:first-child{grid-row:1/3}
+.ask-demo{position:relative;border:1px solid var(--line);background:var(--tile);border-radius:10px;display:grid;place-items:start;padding:22px 96px 70px 22px;overflow:hidden}
+.ask-card{position:relative;width:min(420px,100%);background:#fff;border:1px solid #c9c9c3;border-radius:10px;padding:16px 18px;box-shadow:0 18px 50px #0b0c0e14}
+.ask-card .who{display:flex;align-items:center;font:11px var(--mono);color:var(--muted)}
+.ask-card p{font-size:18px;font-weight:650;margin:8px 0 14px;letter-spacing:-.01em}
+.opts{display:flex;gap:8px;flex-wrap:wrap}
+.opt{border:1px solid #b9b9b3;padding:7px 13px;border-radius:6px;font-weight:600;font-size:14px;background:#fff;transition:transform .12s,box-shadow .3s,background .3s,color .3s}
+.opt.pg.on{background:var(--accent-ink);border-color:var(--accent-ink);color:#fff;box-shadow:0 0 0 7px #5051c522;animation:press .4s var(--expo)}
+.ask-demo .answered{position:absolute;left:2px;right:0;bottom:-1px;transform:translateY(100%);font:12px var(--mono);color:var(--muted);opacity:0;transition:opacity .3s,transform .4s var(--expo);padding-top:10px}
+.ask-demo .answered.on{opacity:1;transform:translateY(100%) translateY(-4px)}
+.cursor{position:absolute;width:22px;height:22px;left:62%;top:120%;opacity:0;transition:left .9s var(--expo),top .9s var(--expo),opacity .3s;z-index:2;filter:drop-shadow(0 2px 2px #0003)}
+.cursor.on{left:44%;top:78%;opacity:1}
+.ask-sprig{position:absolute;right:6px;bottom:-4px;width:104px;height:auto;aspect-ratio:600/750}
+
+/* 04 panes */
+.cinema{position:relative;margin-top:36px}
+.plate{position:relative;z-index:3;background:var(--paper);border:1px solid var(--ink);padding:22px 24px 20px;max-width:430px;margin:0 0 -64px 28px;box-shadow:10px 10px 0 var(--accent)}
+.plate h2{font-size:clamp(38px,4.4vw,60px)}
+.plate p{margin:14px 0 0;font-size:16px}
+.split-sketch{position:absolute;right:28px;bottom:66px;z-index:3;width:280px;background:var(--paper);border:1px solid var(--ink);box-shadow:10px 10px 0 var(--ink);font:11px var(--mono)}
+.split-sketch .tabs{display:flex;gap:6px;border-bottom:1px solid;padding:8px}
+.split-sketch .tabs span{border:1px solid;padding:3px 7px;border-radius:3px}
+.split-sketch .tabs [data-at]{opacity:0;transform:translateY(-6px);transition:opacity .3s,transform .4s var(--expo)}
+.split-sketch .tabs [data-at].on{opacity:1;transform:none}
+.split-sketch .panes{display:flex;height:96px}
+.split-sketch .panes i{font-style:normal;padding:10px;overflow:hidden;white-space:nowrap}
+.split-sketch .panes i:first-child{flex:1 1 100%;transition:flex-basis .7s var(--expo)}
+.split-sketch .panes i:last-child{flex:0 0 0;border-left:0 solid;padding-inline:0;transition:flex-basis .7s var(--expo),padding .7s}
+.split-sketch.on .panes i:first-child{flex-basis:46%}
+.split-sketch.on .panes i:last-child{flex-basis:54%;border-left-width:1px;padding-inline:10px}
+
+/* 05–06 changes & review */
+.flight{display:flex;justify-content:center;align-items:center;gap:10px;margin:36px 0 22px;font:12px var(--mono);min-height:44px}
+.flight .chip{border:1px solid #ffffff44;border-radius:6px;padding:10px 13px;background:#17181c}
+.flight .comment{opacity:0;transform:translateX(-60px)}
+.flight .comment.on{animation:fly-in .6s var(--expo) forwards}
+.flight .arrow{color:var(--dark-muted);transition:color .3s}
+.flight .arrow.on{color:var(--light)}
+.flight .agent{color:var(--dark-muted);border-style:dashed;transition:color .3s,box-shadow .5s}
+.flight .agent.on{color:#b5b5ff;border-style:solid;box-shadow:0 0 0 1px #b5b5ff,0 0 0 8px #b5b5ff18}
+
+/* 07 land */
+.flood{background:var(--paper);isolation:isolate}
+.flood:before{content:"";position:absolute;inset:0;z-index:-1;background:var(--flood-bg,var(--accent));clip-path:circle(calc(var(--p,1) * 150%) at var(--ox,50%) var(--oy,0))}
+.flood.to-dark{--flood-bg:var(--dark);color:var(--light)}
+.land-head .button{margin-top:22px;background:var(--ink);border-color:var(--ink)}
+.land-head .button:active{transform:scale(.95)}
+.land-stage{margin-top:44px;border:1px solid #0b0c0e66;background:var(--paper);border-radius:10px;padding:20px 22px 16px;color:var(--ink)}
+.land-map{width:100%;height:auto;display:block}
+.land-map.tall{display:none}
+.land-map text{font-family:var(--mono);fill:var(--ink)}
+.land-map .nm{font-family:var(--sans);font-weight:650;letter-spacing:-.01em}
+.land-map .main{stroke:var(--ink);stroke-width:8;stroke-linecap:round}
+.land-map .task rect{fill:#fff;stroke:var(--ink)}
+.land-map .lane{fill:none;stroke:var(--ink);stroke-width:2;stroke-dasharray:4 6;opacity:.3;transition:opacity .3s}
+.land-map .on .lane{stroke-dasharray:none;opacity:1;animation:draw .7s var(--expo)}
+.land-map .mdot{fill:var(--accent-ink);transform-box:fill-box;transform-origin:center;transform:scale(0);transition:transform .45s var(--expo) .35s}
+.land-map .on .mdot{transform:scale(1)}
+.land-map .ok,.land-map .x,.land-map .resolve{opacity:0;transition:opacity .3s .35s}
+.land-map .on .ok,.land-map .on .x,.land-map .on .resolve{opacity:1}
+.land-map .conflict.on rect{fill:#fff0c7;stroke:#805500}
+.land-map .x line{stroke:#805500;stroke-width:3}
+.land-map .resolve rect{fill:#fff0c7;stroke:#805500}
+.land-map .task{transition:transform .4s var(--expo)}
+.land-map .on .task,.land-map .task.on{transform:translateY(0)}
+.land-foot{display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px 20px;margin-top:10px;font:700 12px var(--mono);font-variant-numeric:tabular-nums}
+.land-foot>span{color:var(--muted);font-weight:400;transition:color .3s}
+.land-foot span.on{color:var(--ink);font-weight:700}
+.land-foot span span{color:inherit;font-weight:inherit}
+.land-foot span span:not(.on){visibility:hidden}
+.land-grid{display:grid;grid-template-columns:1.35fr .65fr;gap:18px;margin-top:18px;align-items:end}
+.land-sprig{width:100%;max-width:240px;height:auto;aspect-ratio:600/750;justify-self:center;opacity:0;transform:translateY(40px) scale(.9);transition:opacity .4s,transform .6s var(--expo)}
+.land-sprig.on{opacity:1;transform:none}
+.flood .clip-frame{border-color:#0b0c0e66}
+
+/* 08 team */
+.relay{position:relative;margin-top:44px;border:1px solid var(--line);background:#fff;border-radius:10px;padding:26px;display:grid;grid-template-columns:minmax(0,1fr) 132px minmax(0,1fr);gap:18px;align-items:center}
+.win{border:1px solid #0b0c0e55;border-radius:9px;overflow:hidden;background:#f7f7f3;font:11px/1.45 var(--mono);min-height:250px;display:grid;grid-template-columns:40% 1fr;grid-template-rows:auto 1fr}
+.win.dk{background:#101114;color:#f3f2ee;border-color:#0b0c0e}
+.win .bar{grid-column:1/-1;display:flex;align-items:center;gap:6px;padding:8px 10px;border-bottom:1px solid #0b0c0e22}
+.win.dk .bar{border-color:#ffffff22}
+.win .bar i{width:7px;height:7px;border-radius:50%;background:currentColor;opacity:.25}
+.win .bar span{margin-left:6px}
+.win .bar b{margin-left:auto;font-weight:400;opacity:.7}
+.win .side{border-right:1px solid #0b0c0e22;padding:8px}
+.win.dk .side{border-color:#ffffff22}
+.win .side small{display:block;font-size:10px;opacity:.6;margin:6px 0 2px;text-transform:lowercase}
+.row{display:flex;align-items:center;padding:5px 6px;border-radius:5px;margin:3px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .dot{margin-right:6px;width:7px;height:7px}
+.row.live{opacity:0;transform:translateX(-10px);transition:opacity .4s,transform .5s var(--expo),background .6s}
+.row.live.on{opacity:1;transform:none;background:#8b8cf722}
+.win .pane{padding:10px;display:flex;flex-direction:column;gap:6px;position:relative}
+.win .pane .ln{padding:4px 6px;border-radius:4px;background:#0b0c0e0a}
+.win.dk .pane .ln{background:#ffffff0d}
+.pop{opacity:0;transform:translateY(8px) scale(.96);transition:opacity .35s,transform .5s var(--expo)}
+.pop.on{opacity:1;transform:none}
+.card-mini{border:1px solid currentColor;border-radius:6px;padding:7px 8px;background:var(--paper);color:var(--ink)}
+.card-mini .btns{display:flex;gap:6px;margin-top:6px}
+.card-mini .btns span{border:1px solid;padding:1px 6px;border-radius:4px}
+.card-mini .btns span:first-child{background:var(--ink);color:#fff}
+.hub{position:relative;text-align:center;font:10px var(--mono);color:var(--muted)}
+.hub .node{position:relative;width:74px;height:74px;margin:0 auto 10px;border:1px solid var(--ink);border-radius:50%;display:grid;place-items:center;background:var(--paper);color:var(--ink);font-size:11px}
+.hub .node:before,.hub .node:after{content:"";position:absolute;inset:-1px;border:1px solid var(--accent);border-radius:50%;animation:ring 2.6s ease-out infinite}
+.hub .node:after{animation-delay:1.3s}
+.pkt{position:absolute;top:50%;left:50%;z-index:4;display:flex;align-items:center;gap:6px;font:10px var(--mono);white-space:nowrap;pointer-events:none;opacity:0}
+.pkt i{width:10px;height:10px;border-radius:50%;background:var(--accent-ink);box-shadow:-9px 0 0 -1px #5051c566,-18px 0 0 -2px #5051c533}
+.pkt span{border:1px solid var(--ink);background:var(--paper);padding:3px 6px;border-radius:4px}
+.pkt.to-ada i{box-shadow:9px 0 0 -1px #5051c566,18px 0 0 -2px #5051c533}
+.pkt.on{animation:ltr 1.05s cubic-bezier(.65,0,.35,1) forwards}
+.pkt.to-ada.on{animation-name:rtl}
+.team-clips{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:18px}
+
+/* 09 resume */
+.resume-grid{display:grid;grid-template-columns:.62fr 1fr 1fr;gap:14px;margin-top:48px;align-items:start}
+.ended{position:relative;border:1px solid #c9c9c3;border-radius:10px;background:#fff;padding:18px;min-height:100%;font-size:14px;overflow:hidden}
+.ended .who{display:flex;align-items:center;font:11px var(--mono);color:var(--muted)}
+.ended .gone{margin:14px 0 16px;font-weight:650;font-size:17px;transition:opacity .3s}
+.ended .gone.on{color:var(--muted);text-decoration:line-through}
+.ended .btns{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.ended .btns span{border:1px solid #b9b9b3;border-radius:6px;padding:5px 9px;font-weight:600;font-size:12px}
+.ended .btns .primary{background:var(--ink);color:#fff;border-color:var(--ink);transition:transform .12s,box-shadow .3s}
+.ended .btns .primary.on{transform:scale(.94);box-shadow:0 0 0 7px #5051c522}
+.ended .term{margin-top:18px;background:#101114;color:#f3f2ee;border-radius:6px;padding:10px 12px;font:11px/1.7 var(--mono);min-height:78px}
+.ended .term span{display:block;opacity:0;transition:opacity .3s}
+.ended .term span.on{opacity:1}
+
+/* 10 details */
+.bento{display:grid;grid-template-columns:repeat(12,1fr);gap:14px;margin-top:48px}
+.tile{grid-column:span 4;border:1px solid var(--line);background:#fff;border-radius:10px;padding:20px;display:flex;flex-direction:column;gap:10px}
+.tile p{margin:0;color:var(--muted);font-size:14px}
+.tile .clip{margin-top:4px}
+.t7{grid-column:span 7}
+.t5{grid-column:span 5}
+.t12{grid-column:span 12}
+.t6{grid-column:span 6}
+.stack{grid-column:span 5;display:grid;gap:14px}
+.metric{font:750 clamp(40px,4.6vw,60px)/1 var(--sans);letter-spacing:-.05em;font-variant-numeric:tabular-nums}
+.metric small{font-size:.4em;letter-spacing:0;margin-left:4px}
+.seg{display:inline-flex;border:1px solid var(--ink);border-radius:7px;padding:3px;gap:3px;font:12px var(--mono);align-self:flex-start;position:relative}
+.seg span{padding:6px 12px;border-radius:5px;position:relative;z-index:1;transition:color .3s}
+.seg span.on{color:#fff}
+.seg .thumb{position:absolute;z-index:0;top:3px;bottom:3px;left:3px;width:var(--w,50px);border-radius:5px;background:var(--ink);transform:translateX(var(--x,0));transition:transform .45s var(--expo),width .45s var(--expo)}
+.setup{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;font:12px var(--mono)}
+.setup div{border:1px dashed #b9b9b3;border-radius:7px;padding:10px 12px;color:var(--muted);transition:color .3s,border-color .3s,background .3s}
+.setup div.on{color:var(--ink);border:1px solid var(--ink);background:#fff}
+.setup b{display:block;font:650 13px var(--sans);margin-bottom:4px}
+
+/* 11 cli */
+.cli-grid{display:grid;grid-template-columns:.8fr 1.2fr;gap:18px;margin-top:40px;align-items:start}
+.term-big{background:#101114;border:1px solid #ffffff2b;border-radius:10px;overflow:hidden}
+.term-big .bar{display:flex;gap:6px;padding:10px 12px;border-bottom:1px solid #ffffff1c}
+.term-big .bar i{width:9px;height:9px;border-radius:50%;background:#ffffff33}
+.term-big .cmd{margin:0;border:0;border-radius:0;background:transparent;padding:16px 96px 18px 16px}
+.term-big pre{height:calc(6 * 1.7em + 12px)}
+.caret{display:inline-block;width:.6em;height:1.1em;vertical-align:-.2em;background:currentColor;animation:blink 1s steps(1) infinite}
+
+/* 12 install */
+.install-grid{display:grid;grid-template-columns:.95fr 1.05fr;gap:40px;margin-top:44px;align-items:start}
+.steps{list-style:none;margin:0;padding:0;counter-reset:s}
+.steps li{counter-increment:s;position:relative;border-top:1px solid var(--line);padding:16px 0 16px 44px}
+.steps li:before{content:"0" counter(s);position:absolute;left:4px;top:19px;font:11px var(--mono);color:var(--accent-ink)}
+.steps h3{font-size:17px}
+.steps p{margin:6px 0 0;color:var(--muted);font-size:15px}
+.steps .cmd{margin-top:12px}
+.alert{position:relative;border:1px solid #b9b9b3;border-radius:16px;background:#f5f5f2;box-shadow:0 24px 60px #0b0c0e18;padding:28px 24px 22px;text-align:center;max-width:430px;margin:0 auto}
+.alert .icon{width:64px;height:64px;border-radius:15px;background:#101114;color:var(--light);display:grid;place-items:center;margin:0 auto 14px}
+.alert .icon svg{width:36px;height:36px}
+.alert b{display:block;font-size:16px;margin-bottom:8px}
+.alert p{font-size:13px;margin:0 auto;max-width:36ch}
+.alert .btns{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:22px}
+.alert .btns span{min-height:32px;display:grid;place-items:center;border:1px solid #b9b9b3;border-radius:7px;background:#fff;font-size:13px;position:relative}
+.alert .btns .trash{color:#65666b;text-decoration:line-through}
+.alert .btns .done{background:var(--accent-ink);border-color:var(--accent-ink);color:#fff;font-weight:600}
+.alert .btns .done:after{content:"";position:absolute;inset:-6px;border:2px solid var(--accent-ink);border-radius:10px;animation:ring 1.8s ease-out infinite}
+.alert-note{font:11px var(--mono);color:var(--muted);text-align:center;margin:10px 0 0}
+.settings{max-width:430px;margin:24px auto 0;border:1px solid var(--line);border-radius:10px;background:#fff;padding:14px 16px;display:flex;justify-content:space-between;align-items:center;gap:12px;font-size:13px}
+.settings small{display:block;font:11px var(--mono);color:var(--muted)}
+.settings span:last-child{white-space:nowrap;border:1px solid var(--ink);padding:6px 10px;border-radius:6px;font-weight:600}
+
+/* 13 faq */
+.faq{margin-top:40px;border-top:1px solid var(--line);max-width:860px}
+.faq details{border-bottom:1px solid var(--line)}
+.faq summary{list-style:none;cursor:pointer;font-size:19px;font-weight:650;padding:20px 44px 20px 0;position:relative}
+.faq summary::-webkit-details-marker{display:none}
+.faq summary:after{content:"+";position:absolute;right:8px;top:16px;font:400 26px var(--sans);transition:transform .25s var(--expo)}
+.faq details[open] summary:after{transform:rotate(45deg)}
+.faq details p{max-width:66ch;color:var(--muted);margin:0 0 22px}
+
+/* final + footer */
+.final{position:relative;padding:clamp(80px,8vw,120px) 0 0;border-top:1px solid var(--line);overflow:hidden}
+.final-grid{display:grid;grid-template-columns:1fr 300px;gap:30px;align-items:end}
+.final-copy{padding-bottom:clamp(80px,8vw,120px)}
+.final h2{max-width:11ch;margin-top:26px}
+.final-sprig{display:block;width:100%;height:auto;aspect-ratio:600/750;margin-bottom:-2px}
+.footer{background:var(--dark);color:var(--light);padding:42px 0}
+.footer-row{display:flex;justify-content:space-between;gap:30px;align-items:flex-start}
+.footer-links{display:flex;flex-wrap:wrap;gap:10px 22px;font-size:14px}
+.footer .fine{color:var(--dark-muted)}
+
+@keyframes rise{to{transform:none}}
+@keyframes rise-roll{from{transform:translateY(112%) rotate(4deg)}to{transform:none}}
+@keyframes underline{to{transform:scaleX(1) rotate(-1.2deg)}}
+@keyframes pulse{50%{opacity:.4;transform:scale(.85)}}
+@keyframes marquee{to{transform:translateX(-50%)}}
+@keyframes whip{0%{opacity:1;transform:translateX(42px)}100%{opacity:1;transform:none}}
+@keyframes echo{0%{opacity:.35;transform:translateX(34px)}100%{opacity:0;transform:translateX(-6px)}}
+@keyframes draw{from{stroke-dasharray:400;stroke-dashoffset:400}to{stroke-dasharray:400;stroke-dashoffset:0}}
+@keyframes ring{from{transform:scale(.9);opacity:.8}to{transform:scale(1.5);opacity:0}}
+@keyframes blink{50%{opacity:0}}
+@keyframes press{40%{transform:scale(.92)}}
+@keyframes fly-in{to{opacity:1;transform:none}}
+@keyframes ltr{0%{opacity:0;transform:translate(calc(-50% - var(--dx)/2),-50%)}15%,85%{opacity:1}100%{opacity:0;transform:translate(calc(-50% + var(--dx)/2),-50%)}}
+@keyframes rtl{0%{opacity:0;transform:translate(calc(-50% + var(--dx)/2),-50%)}15%,85%{opacity:1}100%{opacity:0;transform:translate(calc(-50% - var(--dx)/2),-50%)}}
+
+@media (max-width:1100px){.tc{display:none}}
+@media (max-width:900px){
+  :root{--gutter:30px}
+  .nav{display:none;position:absolute;left:15px;right:15px;top:60px;background:var(--paper);border:1px solid var(--ink);border-radius:8px;padding:10px 16px;flex-direction:column;align-items:stretch;gap:0}
+  .nav a{padding:12px 0;font-size:16px}
+  .nav .button{margin-top:6px}
+  .site-header.open .nav{display:flex}
+  .nav-toggle{display:block}
+  .timecode{display:none}
+  .hero{min-height:0}
+.ask-grid>.clip:first-child{grid-row:auto}
+  .hero>.wrap,.intro,.parallel-grid,.ask-grid,.cli-grid,.install-grid,.land-grid,.team-clips,.final-grid{grid-template-columns:1fr}
+  .stage{padding-top:70px}
+  .hero-sprig{width:120px}
+  .sidebar-bento{grid-template-columns:1fr}
+  .states{grid-template-columns:repeat(5,1fr);order:-1}
+  .state{flex-direction:column;align-items:flex-start;gap:4px;padding:10px}
+  .resume-grid{grid-template-columns:1fr 1fr}
+  .resume-grid .ended{grid-column:1/-1}
+  .bento>*{grid-column:1/-1}
+  .plate{margin:0 0 -40px 12px;max-width:none;margin-right:12px}
+  .split-sketch{position:relative;right:auto;bottom:auto;margin:16px 0 0 auto;width:min(280px,86%)}
+  .relay{grid-template-columns:1fr}
+  .hub{padding:8px 0}
+  .pkt.on{animation-name:ttb}.pkt.to-ada.on{animation-name:btt}
+  .pkt.to-ada i,.pkt i{box-shadow:none}
+  .land-map.wide{display:none}
+  .land-map.tall{display:block;max-width:420px;margin:auto}
+  .land-sprig{max-width:170px}
+  .final-grid{gap:0}
+  .final-copy{padding-bottom:20px}
+  .final-sprig{width:220px;margin:0 auto -2px}
+}
+@keyframes ttb{0%{opacity:0;transform:translate(-50%,calc(-50% - var(--dy)/2))}15%,85%{opacity:1}100%{opacity:0;transform:translate(-50%,calc(-50% + var(--dy)/2))}}
+@keyframes btt{0%{opacity:0;transform:translate(-50%,calc(-50% + var(--dy)/2))}15%,85%{opacity:1}100%{opacity:0;transform:translate(-50%,calc(-50% - var(--dy)/2))}}
+@media (max-width:560px){
+  h1{font-size:46px}
+  h2{font-size:40px}
+  .body{font-size:16px}
+  .actions .button{flex:1 1 100%}
+  .statusbar{font-size:10px;gap:4px 12px}
+  .statusbar .sb-end{display:none}
+  .states{grid-template-columns:repeat(3,1fr)}
+  .resume-grid{grid-template-columns:1fr}
+  .ask-demo{padding:28px 14px 96px;min-height:0}
+  .ask-sprig{width:92px}
+  .win{min-height:0}
+  .relay{padding:14px}
+  .setup{grid-template-columns:1fr}
+  .footer-row{flex-direction:column}
+  .flight{flex-wrap:wrap}
+}
+@media (prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}
+  *,*:before,*:after{animation:none!important;transition:none!important}
+  .reveal .w>i,.whip{transform:none!important;opacity:1!important}
+  .accent:after{transform:scaleX(1) rotate(-1.2deg)!important}
+  .flood:before{clip-path:none!important}
+  .cursor,.pkt{display:none}
 }
 
-@media(max-width:520px){
-  .wrap{width:calc(100% - 40px);}
-  .hero-title{font-size:40px;}
-  .cta{align-items:stretch;flex-direction:column;}
-  .button{width:100%;}
-  .shot{margin-top:40px;}
-  .cmd{padding-bottom:62px;padding-right:18px;}
-  .cmd-copy{top:auto;bottom:8px;min-height:44px;}
-  .footer-links{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);width:100%;}
-}
+/* Round 4 final pass: editorial hierarchy, object-led transitions, and end-card finish */
+main{counter-reset:figure}
+.section .clip{counter-increment:figure}
+.section .clip figcaption{display:grid;grid-template-columns:auto 1fr;gap:12px;align-items:baseline;padding-right:4px;line-height:1.45}
+.section .clip figcaption:before{content:"fig. " counter(figure,decimal-leading-zero);font:10px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--accent-ink)}
+.dark .clip figcaption:before{color:#b5b5ff}
+.chapter{display:inline-flex;align-items:center;gap:10px;text-transform:lowercase}
+.chapter:before{content:"";width:20px;height:1px;background:currentColor}
+.intro{position:relative}
+.intro:after{content:"working file";position:absolute;right:0;bottom:-28px;font:9px var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.dark .intro:after{color:var(--dark-muted)}
 
-/* Motion */
-@media(prefers-reduced-motion:reduce){
-  *,*::before,*::after{scroll-behavior:auto!important;transition:none!important;animation:none!important;}
-  .header-row::before{transition:opacity 200ms ease!important;}
+.hero{position:relative}
+.hero:after{content:"01 / 13";position:absolute;right:18px;bottom:20px;font:10px var(--mono);letter-spacing:.1em;color:var(--muted);writing-mode:vertical-rl}
+.js .hero .eyebrow,.js .hero .lede,.js .hero .actions,.js .hero .fine{opacity:0}
+.hero-ready .hero h1 .w>i{animation:rise .66s var(--expo) forwards}
+.hero-ready .hero h1 .w:nth-child(2)>i{animation-delay:.07s}.hero-ready .hero h1 .w:nth-child(3)>i{animation-delay:.14s}.hero-ready .hero h1 .w:nth-child(4)>i{animation:rise-roll .72s .22s var(--expo) forwards}
+.hero-ready .hero .eyebrow,.hero-ready .hero .lede,.hero-ready .hero .actions,.hero-ready .hero .fine{animation:hero-copy .55s var(--expo) forwards}
+.hero-ready .hero .lede{animation-delay:.24s}.hero-ready .hero .actions{animation-delay:.32s}.hero-ready .hero .fine{animation-delay:.4s}
+.js:not(.hero-ready) .hero .stage{opacity:0}
+.hero-ready .hero .stage{animation:hero-reel .72s .26s var(--expo) backwards}
+.stage:before,.stage:after{content:"";position:absolute;z-index:0;left:12px;right:-12px;top:104px;aspect-ratio:1920/1080;border:1px solid var(--accent-ink);border-radius:10px;opacity:0;pointer-events:none}
+.hero-ready .stage:before{animation:hero-echo .72s .31s var(--expo)}
+.hero-ready .stage:after{animation:hero-echo .72s .38s var(--expo);left:24px;right:-24px}
+.statusbar{overflow:hidden;box-shadow:0 8px 30px #0b0c0e0a}
+.statusbar:before{content:"LIVE";font:9px var(--mono);letter-spacing:.12em;color:var(--accent-ink);border-right:1px solid var(--line);padding-right:12px}
+.statusbar.in{animation:status-in .48s .7s var(--expo) both}
+
+.to-dark:after{content:"";position:absolute;z-index:2;left:calc(6% - 5px);top:-5px;width:10px;height:10px;border-radius:50%;background:var(--working);box-shadow:0 0 0 5px #9e9ef822;transform:scale(calc(.8 + var(--p,0)*2));pointer-events:none}
+.flood#land:after{content:"LAND ALL";position:absolute;z-index:2;left:var(--ox);top:var(--oy);font:9px var(--mono);letter-spacing:.08em;color:var(--ink);transform:translate(-50%,-50%) scale(calc(1 - min(var(--p,0),.96)));transform-origin:center;pointer-events:none}
+.fan{box-shadow:0 18px 60px #0b0c0e0b}
+.fan .br{stroke-width:1.8}.fan .main{stroke-width:5}.fan svg circle{filter:drop-shadow(0 0 3px #8b8cf766)}
+.ask-demo{background:linear-gradient(145deg,#f7f7f3,#efefe9);box-shadow:inset 0 1px #fff}
+.ask-card{box-shadow:0 22px 60px #0b0c0e1a,0 2px 0 #fff inset}
+.land-stage{box-shadow:0 24px 70px #31327922}
+.relay{box-shadow:0 24px 70px #0b0c0e0d}
+.relay:before{content:"end-to-end encrypted";position:absolute;left:50%;top:13px;transform:translateX(-50%);font:9px var(--mono);letter-spacing:.08em;color:var(--muted);text-transform:uppercase}
+.win .bar b,.win .side small{opacity:1;color:var(--muted)}
+.win.dk .bar b,.win.dk .side small{color:var(--dark-muted)}
+.tile{box-shadow:0 12px 40px #0b0c0e08}.tile h3:before{content:"+ ";color:var(--accent-ink);font-family:var(--mono)}
+.faq details{transition:background .2s,border-color .2s}.faq details:hover,.faq details[open]{background:#fff;border-color:var(--ink)}
+.faq summary:after{transition:transform .25s var(--expo)}.faq details[open] summary:after{transform:rotate(45deg)}
+.final{min-height:690px;display:grid;align-items:center;border-top:1px solid var(--line);overflow:hidden}
+.final:before{content:"END CARD · 00:00:59:29";position:absolute;left:var(--gutter);top:34px;font:10px var(--mono);letter-spacing:.08em;color:var(--muted)}
+.final-copy{position:relative;z-index:2}.final-copy:after{content:"4 working · 2 asking · 3 ready";display:block;width:max-content;max-width:100%;margin-top:26px;padding:9px 12px;border:1px solid var(--line);background:#fff;font:10px var(--mono);letter-spacing:.04em;box-shadow:6px 6px 0 var(--accent)}
+.final h2{max-width:9ch}.final-sprig{filter:drop-shadow(18px 20px 0 #8b8cf729);transform-origin:60% 85%;animation:wave-bob 3.8s ease-in-out infinite}
+.footer{border-top:1px solid #ffffff22}.footer-links a{text-decoration-color:#8b8cf777}
+@keyframes hero-copy{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+@keyframes hero-reel{from{opacity:0;transform:translateX(54px)}to{opacity:1;transform:none}}
+@keyframes hero-echo{0%{opacity:.5;transform:translateX(38px)}70%{opacity:.12}100%{opacity:0;transform:none}}
+@keyframes status-in{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+@keyframes wave-bob{0%,100%{transform:translateY(0) rotate(0)}50%{transform:translateY(-7px) rotate(.8deg)}}
+@media(max-width:700px){
+  .section .clip figcaption{gap:8px;font-size:11px}.section .clip figcaption:before{font-size:9px}
+  .intro:after,.hero:after{display:none}.chapter:before{width:12px}
+  .hero-ready .hero .stage{animation-name:hero-copy}
+  .stage:before,.stage:after{top:104px}
+  .statusbar:before{width:100%;border:0;padding:0}.statusbar{gap:6px 12px}
+  .relay:before{display:none}.final{min-height:620px}.final:before{left:15px;top:24px}
+  .final-copy:after{white-space:normal}.final-sprig{animation:none;filter:none}
 }
+@media(prefers-reduced-motion:reduce){.hero h1 .w>i,.hero .eyebrow,.hero .lede,.hero .actions,.hero .fine,.hero .stage{opacity:1!important;transform:none!important}.stage:before,.stage:after{display:none}.final-sprig{animation:none}.to-dark:after,.flood#land:after{display:none}}
+.flood:not(.to-dark) figcaption,.flood:not(.to-dark) .chapter{color:var(--ink)}
 </style>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
-<svg class="svg-defs" aria-hidden="true"><defs>
+<svg class="defs" aria-hidden="true"><defs>
 <symbol id="mark" viewBox="0 0 256 256" fill="currentColor"><path fill-rule="evenodd" d="M16 28H116V228H16Q8 228 8 220V36Q8 28 16 28ZM32 66L96 50V206L32 190ZM140 28H240Q248 28 248 36V220Q248 228 240 228H140ZM160 48L224 68V188L160 208Z"/></symbol>
 <symbol id="mark-sm" viewBox="0 0 256 256" fill="currentColor"><path fill-rule="evenodd" d="M16 28H116V228H16Q8 228 8 220V36Q8 28 16 28ZM34 68L94 53V203L34 188ZM140 28H240Q248 28 248 36V220Q248 228 240 228H140ZM162 52L222 70V186L162 204Z"/></symbol>
 <symbol id="wordmark" viewBox="0 10 440 82" overflow="visible" fill="currentColor"><path fill-rule="evenodd" d="M8 12H20V27H38V39H20V69Q20 78 30 78H39V90H28Q8 90 8 70V39H2V27H8ZM54 56Q54 25 78 25Q101 25 101 51V60H67Q69 78 84 78Q94 78 101 71V85Q93 90 81 90Q54 90 54 61ZM67 49H88Q88 37 78 37Q68 37 67 49ZM114 48Q114 25 138 25Q160 25 160 47V88H148V81Q140 90 129 90Q111 90 111 73Q111 55 134 55H148V48Q148 37 138 37Q128 37 128 48ZM148 66H135Q123 66 123 73Q123 79 132 79Q148 79 148 66ZM178 27H190V35Q197 25 209 25Q222 25 228 37Q235 25 248 25Q268 25 268 48V88H256V50Q256 38 247 38Q234 38 234 54V88H222V50Q222 38 213 38Q190 38 190 59V88H178ZM286 27H298V37Q305 25 319 25H324V38H318Q298 38 298 60V88H286ZM336 56Q336 25 360 25Q383 25 383 51V60H349Q351 78 366 78Q376 78 383 71V85Q375 90 363 90Q336 90 336 61ZM349 49H370Q370 37 360 37Q350 37 349 49ZM390 56Q390 25 414 25Q437 25 437 51V60H403Q405 78 420 78Q430 78 437 71V85Q429 90 417 90Q390 90 390 61ZM403 49H424Q424 37 414 37Q404 37 403 49Z"/></symbol>
 </defs></svg>
 <header class="site-header">
- <div class="header-row"><a class="lockup" href="/" aria-label="teamree home"><span class="lockup-tile"><svg aria-hidden="true"><use href="#mark-sm"/></svg></span><span class="lockup-name"><svg class="lockup-word" viewBox="0 10 440 82" overflow="visible" aria-hidden="true"><use href="#wordmark"/></svg><i class="lockup-dot" aria-hidden="true"></i></span></a><a class="nav-toggle" href="#site-nav" role="button" aria-expanded="false" aria-controls="site-nav">Menu</a><nav class="nav" id="site-nav" aria-label="Main"><a href="#worktrees">Worktrees</a><a href="#panes">Panes</a><a href="#teamwork">Teamwork</a><a href="#install">Install</a><a class="github" href="https://github.com/zero-abd/teamree">GitHub</a></nav></div>
+<div class="wrap header-inner">
+<a class="lockup" href="/" aria-label="teamree home"><span class="lockup-tile"><svg aria-hidden="true"><use href="#mark-sm"/></svg></span><span class="lockup-name"><svg class="lockup-word" viewBox="0 10 440 82" overflow="visible" aria-hidden="true"><use href="#wordmark"/></svg><i class="lockup-dot" aria-hidden="true"></i></span></a>
+<span class="timecode" aria-hidden="true"><span id="clock">00:00:00</span> · working file</span>
+<button class="nav-toggle" type="button" aria-expanded="false" aria-controls="nav">Menu</button>
+<nav class="nav" id="nav" aria-label="Main">
+<a href="#features">Features</a><a href="#team">Team</a><a href="#land">Land</a><a href="#install">Install</a><a href="#faq">FAQ</a><a href="https://github.com/zero-abd/teamree">GitHub</a>
+<a class="button small" href="https://github.com/zero-abd/teamree/releases/latest/download/teamree-mac-universal.dmg">Download</a>
+</nav>
+</div>
 </header>
+
 <main id="main">
-<section class="hero"><div class="wrap"><div class="hero-title"><svg class="hero-mark" id="hero-mark" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path data-slab="l" fill-rule="evenodd" d="M16 28H116V228H16Q8 228 8 220V36Q8 28 16 28ZM32 66L96 50V206L32 190Z"/><path data-slab="r" fill-rule="evenodd" d="M140 28H240Q248 28 248 36V220Q248 228 240 228H140ZM160 48L224 68V188L160 208Z"/></svg><h1>Your whole team<br>ships in parallel.</h1></div><p class="lede">Every agent in its own git worktree. Every teammate in the same window.</p><div class="cta"><a class="button" href="https://github.com/zero-abd/teamree/releases/latest/download/teamree-mac-universal.dmg">Download for macOS</a><a class="button secondary" href="https://github.com/zero-abd/teamree">Source on GitHub</a></div><p class="hero-note">Free. macOS 12 or later. Universal build.</p><figure class="shot"><div class="shot-bar" aria-hidden="true"><i></i><i></i><i></i></div><div class="shot-frame" data-demo="new-task"><video width="1728" height="1080" muted playsinline preload="metadata" controls poster="/demos/new-task.jpg" aria-label="Screen capture: the New task dialog in teamree — the task typed once, Claude Code and Codex picked, Start task — then two worktrees in the sidebar and both agents starting with the task as their first prompt."><source src="/demos/new-task.mp4" type="video/mp4"><img src="/screenshot.png" width="1440" height="900" alt="The teamree window: three worktrees and a teammate's worktree in the sidebar, each with its panes and a status dot, beside two split terminals — a dev server logging requests and a test watcher passing."></video></div></figure></div></section>
+<section class="hero">
+<div class="wrap">
+<div>
+<div class="eyebrow">// teamree 0.8.3 — for macOS</div>
+<h1 class="reveal"><span class="w"><i>Your</i></span> <span class="w"><i>whole team</i></span> <span class="w"><i>ships in</i></span> <span class="w accent"><i>parallel.</i></span></h1>
+<p class="lede">Every agent in its own git worktree. Every teammate in the same window.</p>
+<div class="actions">
+<a class="button" href="https://github.com/zero-abd/teamree/releases/latest/download/teamree-mac-universal.dmg">Download for macOS</a>
+<a class="button ghost" href="https://github.com/zero-abd/teamree">Source on GitHub</a>
+</div>
+<p class="fine">Free · MIT · macOS · Apple Silicon and Intel</p>
+</div>
+<div class="stage">
+<video class="hero-sprig" width="600" height="750" muted playsinline loop preload="none" aria-hidden="true"></video>
+<!-- SHOWREEL SLOT: the final reel replaces demos/showreel-*.{mp4,webm}, demos/showreel.webp and demos/showreel.vtt (site/README.md). -->
+<figure class="clip" data-clip="showreel" data-sizes="1080,720" style="--ar:1920/1080"><div class="clip-frame"><img class="poster" src="/demos/showreel.webp" srcset="/demos/showreel-640.webp 640w, /demos/showreel.webp 1280w" sizes="(max-width: 900px) 100vw, 60vw" width="1280" height="720" alt="" fetchpriority="high"><video width="1920" height="1080" muted playsinline loop preload="none" poster="/demos/showreel.webp" aria-label="The teamree showreel (reel)" aria-describedby="showreel-cap"><track kind="captions" src="/demos/showreel.vtt" srclang="en" label="English"></video><button class="sound" type="button">Watch with sound</button><button class="clip-toggle" type="button" aria-label="Play">▶</button></div><figcaption id="showreel-cap">The teamree showreel.</figcaption></figure>
+<div class="statusbar" aria-hidden="true"><span><i class="dot d-working pulse"></i><b data-count="4">4</b> working</span><span><i class="dot d-asking"></i><b data-count="2">2</b> asking</span><span><i class="dot d-ready"></i><b data-count="3">3</b> ready to land</span><span class="sb-end">keep-awake On</span></div>
+</div>
+</div>
+</section>
 
-<section class="section" id="worktrees"><div class="wrap"><div class="section-row"><div class="section-copy"><h2>A worktree per task</h2><p>Start from any ref. Attempts never see each other's files; abandoning one is deleting a directory.</p></div><figure class="demo-figure"><div class="demo-frame" data-demo="open-anything"><div class="demo-pending" aria-hidden="true"><img src="/screenshot.png" alt="" decoding="async"></div><video width="1728" height="1080" muted playsinline preload="none" controls poster="/demos/open-anything.jpg" aria-label="Screen capture: ⌘P opening src/routes/items.ts, rendered docs/api.md and a PNG as file tabs beside a terminal pane.">
-<source src="/demos/open-anything.mp4" type="video/mp4">
-</video></div><figcaption class="demo-cap">⌘P opens code, rendered Markdown and an image as tabs beside the terminal.</figcaption></figure></div><div class="section-row reverse"><div class="section-copy"><h3>Changes open beside panes</h3><p>The diff opens beside the panes. Stage or discard a hunk, commit, publish the branch, then open its review on the forge.</p></div><figure class="demo-figure"><div class="demo-frame" data-demo="review-and-ship"><div class="demo-pending" aria-hidden="true"><img src="/screenshot.png" alt="" decoding="async"></div><video width="1728" height="1080" muted playsinline preload="none" controls poster="/demos/review-and-ship.jpg" aria-label="Screen capture: the Changes tab opening a diff beside the terminal panes, one hunk staged, Commit All, Publish branch pushing it, and Open review appearing.">
-<source src="/demos/review-and-ship.mp4" type="video/mp4">
-</video></div><figcaption class="demo-cap">One hunk staged, then Commit All, Publish branch and Open review from the Changes tab.</figcaption></figure></div></div></section>
+<section class="agents" aria-labelledby="agents-label">
+<p class="agents-label" id="agents-label">Runs the agent CLIs on your PATH</p>
+<p class="sr">claude, codex, gemini, opencode, droid, grok, cursor-agent, copilot, amp, pi, goose, auggie, crush, cline, codebuff, cn, kilo, kimi, kiro-cli, vibe and qwen.</p>
+<div class="marquee" aria-hidden="true"><span>claude</span><span>codex</span><span>gemini</span><span>opencode</span><span>droid</span><span>grok</span><span>cursor-agent</span><span>copilot</span><span>amp</span><span>pi</span><span>goose</span><span>auggie</span><span>crush</span><span>cline</span><span>codebuff</span><span>cn</span><span>kilo</span><span>kimi</span><span>kiro-cli</span><span>vibe</span><span>qwen</span><span>claude</span><span>codex</span><span>gemini</span><span>opencode</span><span>droid</span><span>grok</span><span>cursor-agent</span><span>copilot</span><span>amp</span><span>pi</span><span>goose</span><span>auggie</span><span>crush</span><span>cline</span><span>codebuff</span><span>cn</span><span>kilo</span><span>kimi</span><span>kiro-cli</span><span>vibe</span><span>qwen</span></div>
+</section>
 
-<section class="section" id="panes"><div class="wrap"><div class="section-row"><div class="section-copy"><h2>A state per pane</h2><p>Working, waiting, finished or failed, read off the PTY. One view lists every pane, failures first.</p><ul class="state-list"><li><i class="working"></i>working</li><li><i class="waiting"></i>waiting</li><li><i class="finished"></i>finished</li><li><i class="failed"></i>failed</li></ul><p>Split terminals, nested, a real PTY in each. Finds <code>claude</code>, <code>codex</code>, <code>gemini</code>, <code>opencode</code> and <code>droid</code> on your PATH.</p></div><figure class="demo-figure"><div class="demo-frame" data-demo="every-pane"><div class="demo-pending" aria-hidden="true"><img src="/screenshot.png" alt="" decoding="async"></div><video width="1728" height="1080" muted playsinline preload="none" controls poster="/demos/every-pane.jpg" aria-label="Screen capture: switching worktrees, then adding a terminal and Claude Code as marked panes rebalance with a state dot each.">
-<source src="/demos/every-pane.mp4" type="video/mp4">
-</video></div><figcaption class="demo-cap">Each pane carries its harness and state; new panes rebalance into a 2×2 grid.</figcaption></figure></div><div class="section-row reverse"><div class="section-copy"><h3>Pane history survives relaunch</h3><p>Quit and relaunch: file tabs and shell scrollback come back, each shell starts fresh, and an agent with a conversation resumes it.</p></div><figure class="demo-figure"><div class="demo-frame" data-demo="pick-it-back-up"><div class="demo-pending" aria-hidden="true"><img src="/screenshot.png" alt="" decoding="async"></div><video width="1728" height="1080" muted playsinline preload="none" controls poster="/demos/pick-it-back-up.jpg" aria-label="Screen capture: teamree quitting and relaunching, the file tabs and recorded shell scrollback coming back above fresh shells, and a Codex pane resuming with a resumed badge.">
-<source src="/demos/pick-it-back-up.mp4" type="video/mp4">
-</video></div><figcaption class="demo-cap">Recorded shell output stays above a fresh shell; the file tabs return and Codex resumes its conversation.</figcaption></figure></div></div></section>
+<section class="section" id="features">
+<div class="wrap">
+<span class="tc" aria-hidden="true">// 01 — parallel · <b>00:00:00:00</b></span>
+<div class="intro">
+<div><p class="chapter">// 01 — parallel</p>
+<h2 class="reveal"><span class="w"><i>Every task gets</i></span> <span class="w"><i>its own</i></span> <span class="w accent"><i>worktree.</i></span></h2></div>
+<div class="body"><p>Type the task once. Claude Code ×3 and Codex ×1 start side by side, each in its own git worktree with its own terminals.</p><p>Setup runs first. No agent overwrites another.</p></div>
+</div>
+<div class="parallel-grid">
+<figure class="clip whip" data-clip="parallel" data-sizes="1080,720" style="--ar:1728/1080"><i class="echo" aria-hidden="true"></i><div class="clip-frame"><video width="1728" height="1080" muted playsinline loop preload="none" data-poster="/demos/parallel.webp" aria-label="New Task with four agents (recording)" aria-describedby="parallel-cap"></video><button class="clip-toggle" type="button" aria-label="Play">▶</button></div><figcaption id="parallel-cap">⌘N, one task, Claude Code ×3 and Codex ×1: four worktrees run setup, then their agents start.</figcaption></figure>
+<div class="fan" role="img" aria-label="Four worktree branches leave main, run at the same time, and merge back.">
+<svg viewBox="0 0 420 300" aria-hidden="true">
+<path class="main" d="M10 150H410"/>
+<path id="b1" class="br" d="M40 150C90 150 80 40 130 40H290C340 40 330 150 380 150"/>
+<path id="b2" class="br" d="M40 150C90 150 80 110 130 110H290C340 110 330 150 380 150"/>
+<path id="b3" class="br" d="M40 150C90 150 80 190 130 190H290C340 190 330 150 380 150"/>
+<path id="b4" class="br" d="M40 150C90 150 80 260 130 260H290C340 260 330 150 380 150"/>
+<text x="10" y="138">main</text>
+<text class="lbl" x="136" y="30">wt/recently-viewed-1</text>
+<text class="lbl" x="136" y="100">wt/recently-viewed-2</text>
+<text class="lbl" x="136" y="210">wt/recently-viewed-3</text>
+<text class="lbl" x="136" y="280">wt/recently-viewed-4</text>
+<g fill="#9e9ef8">
+<circle r="7"><animateMotion dur="4.2s" repeatCount="indefinite" calcMode="spline" keyTimes="0;1" keySplines=".45 0 .55 1"><mpath href="#b1"/></animateMotion></circle>
+<circle r="7"><animateMotion dur="5.1s" begin="-1.3s" repeatCount="indefinite" calcMode="spline" keyTimes="0;1" keySplines=".45 0 .55 1"><mpath href="#b2"/></animateMotion></circle>
+<circle r="7"><animateMotion dur="3.7s" begin="-2.2s" repeatCount="indefinite" calcMode="spline" keyTimes="0;1" keySplines=".45 0 .55 1"><mpath href="#b3"/></animateMotion></circle>
+</g>
+<circle r="7" fill="#d6a24a"><animateMotion dur="4.6s" begin="-.6s" repeatCount="indefinite" calcMode="spline" keyTimes="0;1" keySplines=".45 0 .55 1"><mpath href="#b4"/></animateMotion></circle>
+</svg>
+<ul class="fan-legend">
+<li><span><i class="dot d-working pulse"></i>claude</span><b>worktree 1</b></li>
+<li><span><i class="dot d-working pulse"></i>claude</span><b>worktree 2</b></li>
+<li><span><i class="dot d-working pulse"></i>claude</span><b>worktree 3</b></li>
+<li><span><i class="dot d-asking"></i>codex</span><b>worktree 4</b></li>
+</ul>
+</div>
+</div>
+</div>
+</section>
 
-<section class="section" id="cli"><div class="wrap section-row"><div class="section-copy"><h2>A CLI agents can drive</h2><p>Create worktrees, run commands and read output over a local socket. Every command takes <code>--json</code>.</p><div class="cmd"><pre tabindex="0"><code id="cmd-cli">teamree worktree create --project app --name "fix login"
-teamree worktree wait fix-login
-teamree terminal run --worktree fix-login --command "npm test"
-teamree worktree changes fix-login</code></pre><button class="cmd-copy" type="button" data-copy="cmd-cli" aria-label="Copy CLI commands">Copy</button></div></div><figure class="demo-figure"><div class="demo-frame" data-demo="cli"><div class="demo-pending" aria-hidden="true"><img src="/screenshot.png" alt="" decoding="async"></div><video width="1728" height="1080" muted playsinline preload="none" controls poster="/demos/cli.jpg" aria-label="Screen capture: a terminal pane running teamree status, teamree worktree list and teamree worktree create with --agent claude against the pantry project; the new worktree appears in the sidebar with Claude Code starting in it.">
-<source src="/demos/cli.mp4" type="video/mp4">
-</video></div><figcaption class="demo-cap">teamree status, worktree list, then worktree create with --agent claude; the new worktree lands in the sidebar.</figcaption></figure></div></section>
+<section class="section dark flood to-dark" data-flood data-origin="12% 0">
+<div class="wrap">
+<span class="tc" aria-hidden="true">// 02 — sidebar · <b>00:00:00:00</b></span>
+<div class="intro">
+<div><p class="chapter">// 02 — sidebar</p>
+<h2 class="reveal"><span class="w"><i>One sidebar.</i></span> <span class="w"><i>Every</i></span> <span class="w accent"><i>state.</i></span></h2></div>
+<div class="body"><p>Every task says what it is doing: working, asking you, ready, failed or ended. All Panes ranks them by what needs you, and ⌘K jumps anywhere.</p></div>
+</div>
+<div class="sidebar-bento">
+<figure class="clip whip" data-clip="sidebar" data-sizes="1080,720" style="--ar:1728/1080"><i class="echo" aria-hidden="true"></i><div class="clip-frame"><video width="1728" height="1080" muted playsinline loop preload="none" data-poster="/demos/sidebar.webp" aria-label="The sidebar (recording)" aria-describedby="sidebar-cap"></video><button class="clip-toggle" type="button" aria-label="Play">▶</button></div><figcaption id="sidebar-cap">Eleven tasks across three projects, each with its state; Claude Code and Codex in split panes.</figcaption></figure>
+<div class="states" aria-label="Task states">
+<div class="state"><span><i class="dot d-working pulse"></i>working</span><b data-count="4">4</b></div>
+<div class="state"><span><i class="dot d-asking"></i>asking you</span><b data-count="2">2</b></div>
+<div class="state"><span><i class="dot d-ready"></i>ready</span><b data-count="3">3</b></div>
+<div class="state"><span><i class="dot d-failed"></i>failed</span><b data-count="1">1</b></div>
+<div class="state"><span><i class="dot d-ended"></i>ended</span><b data-count="1">1</b></div>
+</div>
+<figure class="clip whip" data-clip="all-panes" data-sizes="720" style="--ar:1728/1080"><i class="echo" aria-hidden="true"></i><div class="clip-frame"><video width="1728" height="1080" muted playsinline loop preload="none" data-poster="/demos/all-panes.webp" aria-label="All Panes (recording)" aria-describedby="all-panes-cap"></video><button class="clip-toggle" type="button" aria-label="Play">▶</button></div><figcaption id="all-panes-cap">All Panes ranks every pane by what needs you; ⌘K jumps to a task.</figcaption></figure>
+</div>
+</div>
+</section>
 
-<section class="section" id="teamwork"><div class="wrap section-row"><div class="section-copy"><h2>Teammates in the window</h2><p>Add a teammate's key and they can watch your panes and ask to type; keystrokes run only when you allow them.</p><a class="text-link" href="https://github.com/zero-abd/teamree/blob/main/docs/trying-teamwork.md">Trying teamwork</a></div><figure class="demo-figure"><div class="demo-frame" data-demo="teamwork"><div class="demo-pending" aria-hidden="true"><img src="/screenshot.png" alt="" decoding="async"></div><video width="1728" height="1080" muted playsinline preload="none" controls poster="/demos/teamwork.jpg" aria-label="Screen capture: the Teamwork page showing both keys on the roster, the teammate sam connected and Teamwork is working; then sam's worktree in the sidebar and sam's dev server opened in a pane beside a local terminal.">
-<source src="/demos/teamwork.mp4" type="video/mp4">
-</video></div><figcaption class="demo-cap">Teamwork connected over a relay; a teammate's worktree shows in the sidebar and their dev server opens beside your shell.</figcaption></figure></div></section>
+<section class="section">
+<div class="wrap">
+<span class="tc" aria-hidden="true">// 03 — asking you · <b>00:00:00:00</b></span>
+<div class="intro">
+<div><p class="chapter">// 03 — asking you</p>
+<h2 class="reveal"><span class="w"><i>When an agent</i></span> <span class="w"><i>needs you,</i></span> <span class="w"><i>it</i></span> <span class="w accent"><i>asks.</i></span></h2></div>
+<div class="body"><p>An agent runs <code>teamree msg ask</code>. The question sits at the top of its pane with the answers as buttons, plus Reply…. From another task, a corner card asks instead.</p>
+<div class="cmd"><pre id="ask-command" tabindex="0">teamree msg ask "Which store should back the rate limiter?" \
+  --options Redis,Postgres</pre><button class="copy" type="button" data-copy="ask-command" aria-label="Copy the msg ask command">Copy</button></div></div>
+</div>
+<div class="ask-grid">
+<figure class="clip whip" data-clip="ask" data-sizes="1080,720" style="--ar:1728/1080"><i class="echo" aria-hidden="true"></i><div class="clip-frame"><video width="1728" height="1080" muted playsinline loop preload="none" data-poster="/demos/ask.webp" aria-label="An ask card in a pane (recording)" aria-describedby="ask-cap"></video><button class="clip-toggle" type="button" aria-label="Play">▶</button></div><figcaption id="ask-cap">Claude Code asks through teamree msg ask; Postgres is clicked and it carries on.</figcaption></figure>
+<div class="ask-demo" data-tl="6" data-ms="700" data-hold="5" role="img" aria-label="An ask card: Which store should back the rate limiter? Postgres is pressed and the agent carries on.">
+<div class="ask-card" aria-hidden="true">
+<div class="who"><i class="dot d-asking"></i>Claude Code · needs you</div>
+<p>Which store should back the rate limiter?</p>
+<div class="opts"><span class="opt">Redis</span><span class="opt pg" data-at="3">Postgres</span><span class="opt">Reply…</span></div>
+<svg class="cursor" data-at="1" data-until="5" viewBox="0 0 22 22" aria-hidden="true"><path d="M3 2l15 9-7 1.5L8 20z" fill="#0b0c0e" stroke="#fff" stroke-width="1.4" stroke-linejoin="round"/></svg>
+<div class="answered" data-at="4">✓ Postgres · Claude Code carries on</div>
+</div>
+<img class="ask-sprig" src="/sprig/point.png" width="600" height="750" alt="" loading="lazy" decoding="async">
+</div>
+<figure class="clip whip" data-clip="ask-corner" data-sizes="720" style="--ar:1728/1080"><i class="echo" aria-hidden="true"></i><div class="clip-frame"><video width="1728" height="1080" muted playsinline loop preload="none" data-poster="/demos/ask-corner.webp" aria-label="A corner ask card (recording)" aria-describedby="ask-corner-cap"></video><button class="clip-toggle" type="button" aria-label="Play">▶</button></div><figcaption id="ask-corner-cap">From another task, the corner card asks; Redis answers it.</figcaption></figure>
+</div>
+</div>
+</section>
 
-<section class="section" id="install"><div class="wrap section-row"><div class="section-copy"><h2>Install</h2><p>Free, macOS 12 or later, signed ad-hoc. macOS refuses the first launch: press Done, not Move to Trash, then clear the flag.</p><a class="text-link" href="https://github.com/zero-abd/teamree/blob/main/docs/install.md">docs/install.md</a></div><div><div class="cmd"><pre tabindex="0"><code id="cmd-quarantine">xattr -dr com.apple.quarantine /Applications/teamree.app</code></pre><button class="cmd-copy" type="button" data-copy="cmd-quarantine" aria-label="Copy quarantine command">Copy</button></div><div class="cmd"><pre tabindex="0"><code id="cmd-sum">shasum -a 256 teamree-mac-universal.dmg</code></pre><button class="cmd-copy" type="button" data-copy="cmd-sum" aria-label="Copy checksum command">Copy</button></div></div></div></section>
+<section class="section">
+<div class="wrap">
+<span class="tc" aria-hidden="true">// 04 — panes · <b>00:00:00:00</b></span>
+<div class="cinema" data-tl="4" data-ms="1000" data-hold="3">
+<div class="plate">
+<p class="chapter">// 04 — panes</p>
+<h2 class="reveal"><span class="w"><i>Split panes,</i></span> <span class="w"><i>each with</i></span> <span class="w"><i>its own</i></span> <span class="w accent"><i>tabs.</i></span></h2>
+<p>⌘D splits. ⌘T adds a tab to that split. Rename any tab. ⌘-click a link in a terminal to open it.</p>
+</div>
+<figure class="clip whip" data-clip="panes" data-sizes="1080,720" style="--ar:1728/1080"><i class="echo" aria-hidden="true"></i><div class="clip-frame"><video width="1728" height="1080" muted playsinline loop preload="none" data-poster="/demos/panes.webp" aria-label="Split panes and tabs (recording)" aria-describedby="panes-cap"></video><button class="clip-toggle" type="button" aria-label="Play">▶</button></div><figcaption id="panes-cap">⌘D splits with its own tab bar; the tab becomes dev server; ⌘T adds npm test.</figcaption></figure>
+<div class="split-sketch" data-at="1" aria-hidden="true">
+<div class="tabs"><span>Claude Code</span><span data-at="2">dev server</span><span class="new" data-at="3">npm test</span></div>
+<div class="panes"><i>● Claude Code<br>Editing CartStore…</i><i>$ npm run dev<br>ready on :5173</i></div>
+</div>
+</div>
+</div>
+</section>
+
+<section class="section dark">
+<div class="wrap">
+<span class="tc" aria-hidden="true">// 05 — changes · <b>00:00:00:00</b></span>
+<div class="intro">
+<div><p class="chapter">// 05 — changes</p>
+<h2 class="reveal"><span class="w"><i>Stage,</i></span> <span class="w"><i>commit,</i></span> <span class="w accent"><i>push.</i></span></h2></div>
+<div class="body"><p>A Changes view with Staged and Changes, List or Tree. Stage a hunk, then Commit, Commit &amp; Push or Amend. A commit a hook refuses names the hook, with Send to Agent.</p></div>
+</div>
+<div style="margin-top:44px"><figure class="clip whip" data-clip="changes" data-sizes="1080,720" style="--ar:1728/1080"><i class="echo" aria-hidden="true"></i><div class="clip-frame"><video width="1728" height="1080" muted playsinline loop preload="none" data-poster="/demos/changes.webp" aria-label="Changes and commit (recording)" aria-describedby="changes-cap"></video><button class="clip-toggle" type="button" aria-label="Play">▶</button></div><figcaption id="changes-cap">Stage Hunk, a commit message, then Commit & Push.</figcaption></figure></div>
+</div>
+</section>
+
+<section class="section dark">
+<div class="wrap">
+<span class="tc" aria-hidden="true">// 06 — review · <b>00:00:00:00</b></span>
+<div class="intro">
+<div><p class="chapter">// 06 — review</p>
+<h2 class="reveal"><span class="w"><i>Comments go</i></span> <span class="w"><i>straight to the</i></span> <span class="w accent"><i>agent.</i></span></h2></div>
+<div class="body"><p>Comment on a line of the diff and press Send to Claude Code. The agent picks it up in its pane.</p></div>
+</div>
+<div class="flight" data-tl="4" data-ms="800" data-hold="4" aria-hidden="true">
+<span class="chip comment" data-at="1">CartPage.tsx:25 · “Show the amount saved here, not a sentence.”</span>
+<span class="arrow" data-at="2">→</span>
+<span class="chip agent" data-at="3">Claude Code</span>
+</div>
+<figure class="clip whip" data-clip="review" data-sizes="1080,720" style="--ar:1728/1080"><i class="echo" aria-hidden="true"></i><div class="clip-frame"><video width="1728" height="1080" muted playsinline loop preload="none" data-poster="/demos/review.webp" aria-label="A line comment to the agent (recording)" aria-describedby="review-cap"></video><button class="clip-toggle" type="button" aria-label="Play">▶</button></div><figcaption id="review-cap">A line comment on CartPage.tsx goes to Claude Code, which edits the file and reruns the tests.</figcaption></figure>
+</div>
+</section>
+
+<section class="section flood" id="land" data-flood data-origin="button">
+<div class="wrap">
+<span class="tc" aria-hidden="true">// 07 — land · <b>00:00:00:00</b></span>
+<div class="intro land-head">
+<div><p class="chapter">// 07 — land</p>
+<h2 class="reveal"><span class="w"><i>Ready to land?</i></span> <span class="w"><i>Land</i></span> <span class="w accent"><i>All.</i></span></h2>
+<button class="button" type="button" id="land-all">Land All</button></div>
+<div class="body"><p>Finished tasks queue in Ready to land with Review, Land and Discard. Land All fetches origin first, lands them in order, and skips the one that conflicts, with Resolve…. The rest land.</p></div>
+</div>
+<div class="land-stage" data-tl="8" data-ms="750" data-hold="6" id="land-tl" role="img" aria-label="Land All: fetch origin, then five tasks land on main in order. Roomier product grid conflicts on theme.css and is skipped with Resolve. Landed 4, 1 needs you, main pushed.">
+<svg class="land-map wide" viewBox="0 0 1120 330" aria-hidden="true">
+<path class="main" d="M16 280H1104"/>
+<text x="16" y="314" font-size="12">main</text>
+<g data-at="2"><path class="lane" d="M120 84V214Q120 280 168 280"/><g class="task"><rect x="20" y="24" width="200" height="60" rx="6"/><text x="32" y="46" font-size="11">01</text><text x="32" y="68" font-size="13" class="nm">Tighten the product grid</text></g><circle class="mdot" cx="168" cy="280" r="8"/><text class="ok" x="182" y="268" font-size="11">✓ merged</text></g>
+<g data-at="3" class="conflict"><path class="lane" d="M338 84V186"/><g class="task"><rect x="238" y="24" width="200" height="60" rx="6"/><text x="250" y="46" font-size="11">02 · theme.css</text><text x="250" y="68" font-size="13" class="nm">Roomier product grid</text></g><g class="x"><line x1="329" y1="196" x2="347" y2="214"/><line x1="347" y1="196" x2="329" y2="214"/></g><text class="x" x="354" y="210" font-size="11" fill="#805500">skipped · conflict</text><g class="resolve"><rect x="354" y="220" width="84" height="26" rx="4"/><text x="364" y="238" font-size="11">Resolve…</text></g></g>
+<g data-at="4"><path class="lane" d="M556 84V214Q556 280 604 280"/><g class="task"><rect x="456" y="24" width="200" height="60" rx="6"/><text x="468" y="46" font-size="11">03</text><text x="468" y="68" font-size="13" class="nm">Lazy-load product images</text></g><circle class="mdot" cx="604" cy="280" r="8"/><text class="ok" x="618" y="268" font-size="11">✓ merged</text></g>
+<g data-at="5"><path class="lane" d="M774 84V214Q774 280 822 280"/><g class="task"><rect x="674" y="24" width="200" height="60" rx="6"/><text x="686" y="46" font-size="11">04</text><text x="686" y="68" font-size="13" class="nm">Idempotency keys for orders</text></g><circle class="mdot" cx="822" cy="280" r="8"/><text class="ok" x="836" y="268" font-size="11">✓ merged</text></g>
+<g data-at="6"><path class="lane" d="M992 84V214Q992 280 1040 280"/><g class="task"><rect x="892" y="24" width="200" height="60" rx="6"/><text x="904" y="46" font-size="11">05</text><text x="904" y="68" font-size="13" class="nm">Fix flaky webhook retry test</text></g><circle class="mdot" cx="1040" cy="280" r="8"/><text class="ok" x="1054" y="268" font-size="11">✓ merged</text></g>
+</svg>
+<svg class="land-map tall" viewBox="0 0 360 600" aria-hidden="true">
+<path class="main" d="M330 18V586"/>
+<text x="340" y="14" font-size="12" text-anchor="end">main</text>
+<g data-at="2"><path class="lane" d="M250 47H296Q330 47 330 81"/><g class="task"><rect x="6" y="18" width="244" height="58" rx="6"/><text x="18" y="39" font-size="11">01</text><text x="18" y="61" font-size="13" class="nm">Tighten the product grid</text></g><circle class="mdot" cx="330" cy="81" r="8"/><text class="ok" x="264" y="99" font-size="11">✓</text></g>
+<g data-at="3" class="conflict"><path class="lane" d="M250 161H280"/><g class="task"><rect x="6" y="132" width="244" height="58" rx="6"/><text x="18" y="153" font-size="11">02 · theme.css</text><text x="18" y="175" font-size="13" class="nm">Roomier product grid</text></g><g class="x"><line x1="288" y1="153" x2="304" y2="169"/><line x1="304" y1="153" x2="288" y2="169"/></g><g class="resolve"><rect x="18" y="198" width="84" height="24" rx="4"/><text x="28" y="215" font-size="11">Resolve…</text></g><text class="x" x="112" y="215" font-size="11" fill="#805500">skipped · conflict</text></g>
+<g data-at="4"><path class="lane" d="M250 275H296Q330 275 330 309"/><g class="task"><rect x="6" y="246" width="244" height="58" rx="6"/><text x="18" y="267" font-size="11">03</text><text x="18" y="289" font-size="13" class="nm">Lazy-load product images</text></g><circle class="mdot" cx="330" cy="309" r="8"/><text class="ok" x="264" y="327" font-size="11">✓</text></g>
+<g data-at="5"><path class="lane" d="M250 389H296Q330 389 330 423"/><g class="task"><rect x="6" y="360" width="244" height="58" rx="6"/><text x="18" y="381" font-size="11">04</text><text x="18" y="403" font-size="13" class="nm">Idempotency keys for orders</text></g><circle class="mdot" cx="330" cy="423" r="8"/><text class="ok" x="264" y="441" font-size="11">✓</text></g>
+<g data-at="6"><path class="lane" d="M250 503H296Q330 503 330 537"/><g class="task"><rect x="6" y="474" width="244" height="58" rx="6"/><text x="18" y="495" font-size="11">05</text><text x="18" y="517" font-size="13" class="nm">Fix flaky webhook retry test</text></g><circle class="mdot" cx="330" cy="537" r="8"/><text class="ok" x="264" y="555" font-size="11">✓</text></g>
+</svg>
+<div class="land-foot" aria-hidden="true"><span data-at="1">fetch origin ✓</span><span data-at="2">Landed <b data-vals="0|0|1|1|2|3|4|4">0</b><span data-at="3"> · 1 needs you</span></span><span data-at="7">pushed main ✓</span></div>
+</div>
+<div class="land-grid">
+<figure class="clip whip" data-clip="land" data-sizes="1080,720" style="--ar:1728/1080"><i class="echo" aria-hidden="true"></i><div class="clip-frame"><video width="1728" height="1080" muted playsinline loop preload="none" data-poster="/demos/land.webp" aria-label="Ready to land and Land All (recording)" aria-describedby="land-cap"></video><button class="clip-toggle" type="button" aria-label="Play">▶</button></div><figcaption id="land-cap">Land All: fetch, land in order, skip Roomier product grid on a theme.css conflict, push main.</figcaption></figure>
+<img class="land-sprig" data-at="7" data-in="land-tl" src="/sprig/happy.png" width="600" height="750" alt="" loading="lazy" decoding="async">
+</div>
+</div>
+</section>
+
+<section class="section" id="team">
+<div class="wrap">
+<span class="tc" aria-hidden="true">// 08 — team · <b>00:00:00:00</b></span>
+<div class="intro">
+<div><p class="chapter">// 08 — team</p>
+<h2 class="reveal"><span class="w"><i>Your team,</i></span> <span class="w"><i>live in your</i></span> <span class="w accent"><i>sidebar.</i></span></h2></div>
+<div class="body"><p>Teammates join over a relay your team hosts. Their tasks appear in your sidebar as they start; open a pane to watch it live. They can ask to type, and keystrokes run only when you allow them.</p><p>Request Review sends a finished task to a teammate. Their line comments go straight to your agent.</p></div>
+</div>
+<div class="relay" data-tl="8" data-ms="1100" data-hold="4" role="img" aria-label="Ada and Ben on one relay. Ben's task Gift cards at checkout appears in Ada's sidebar. Ben requests a review. Ada's line comment goes back to Ben's Claude Code.">
+<div class="win" aria-hidden="true">
+<div class="bar"><i></i><i></i><i></i><span>ada</span><b>Studio Light</b></div>
+<div class="side">
+<small>storefront</small>
+<div class="row"><i class="dot d-ready"></i>Lazy-load images</div>
+<div class="row"><i class="dot d-working pulse"></i>Offline cart sync</div>
+<small>ben · <span data-vals="away|away|online">away</span></small>
+<div class="row live" data-at="2"><i class="dot d-working pulse"></i>Gift cards at checkout</div>
+<div class="row live" data-at="2"><i class="dot d-ready"></i>Shipping estimate</div>
+</div>
+<div class="pane">
+<div class="ln">● Claude Code</div>
+<div class="ln">Read src/cart/CartStore.ts</div>
+<div class="card-mini pop" data-at="4"><b>ben</b> asks you to review Shipping estimate on the cart<div class="btns"><span>Review</span><span>Later</span></div></div>
+</div>
+</div>
+<div class="hub" aria-hidden="true"><div class="node">relay</div>your team's relay<br>on Cloudflare</div>
+<div class="win dk" aria-hidden="true">
+<div class="bar"><i></i><i></i><i></i><span>ben</span><b>Studio dark</b></div>
+<div class="side">
+<small>storefront</small>
+<div class="row"><i class="dot d-working pulse"></i>Gift cards at checkout</div>
+<div class="row"><i class="dot d-ready"></i>Shipping estimate</div>
+<small>ada</small>
+<div class="row"><i class="dot d-ready"></i>Lazy-load images</div>
+</div>
+<div class="pane">
+<div class="ln">● Claude Code · Shipping estimate</div>
+<div class="card-mini pop" data-at="6"><b>ada</b>: Free shipping should say Free, not $0.00.<div class="btns"><span>Send to Agent</span></div></div>
+<div class="ln pop" data-at="7">→ Claude Code · editing CartPage.tsx</div>
+</div>
+</div>
+<div class="pkt to-ada" data-at="1" data-until="2" aria-hidden="true"><i></i><span>new task</span></div>
+<div class="pkt to-ada" data-at="3" data-until="4" aria-hidden="true"><i></i><span>Request Review ›</span></div>
+<div class="pkt to-ben" data-at="5" data-until="6" aria-hidden="true"><i></i><span>line comment</span></div>
+</div>
+<div class="team-clips">
+<figure class="clip whip" data-clip="team-live" data-sizes="1080,720" style="--ar:2048/1080"><i class="echo" aria-hidden="true"></i><div class="clip-frame"><video width="2048" height="1080" muted playsinline loop preload="none" data-poster="/demos/team-live.webp" aria-label="A teammate's task, live (recording)" aria-describedby="team-live-cap"></video><button class="clip-toggle" type="button" aria-label="Play">▶</button></div><figcaption id="team-live-cap">Ben starts Gift cards at checkout; it appears in Ada's sidebar within a second.</figcaption></figure>
+<figure class="clip whip" data-clip="team-review" data-sizes="1080,720" style="--ar:2048/1080"><i class="echo" aria-hidden="true"></i><div class="clip-frame"><video width="2048" height="1080" muted playsinline loop preload="none" data-poster="/demos/team-review.webp" aria-label="Request Review (recording)" aria-describedby="team-review-cap"></video><button class="clip-toggle" type="button" aria-label="Play">▶</button></div><figcaption id="team-review-cap">Ada requests Ben's review; he opens her diff with her agent's summary.</figcaption></figure>
+</div>
+</div>
+</section>
+
+<section class="section">
+<div class="wrap">
+<span class="tc" aria-hidden="true">// 09 — resume · <b>00:00:00:00</b></span>
+<div class="intro">
+<div><p class="chapter">// 09 — resume</p>
+<h2 class="reveal"><span class="w"><i>Pick up where</i></span> <span class="w"><i>it</i></span> <span class="w accent"><i>stopped.</i></span></h2></div>
+<div class="body"><p>An ended agent becomes a card that says when it ended. Resume continues the same conversation. After a relaunch, Resume All brings back every stopped agent.</p></div>
+</div>
+<div class="resume-grid">
+<div class="ended" data-tl="6" data-ms="800" data-hold="5" role="img" aria-label="An ended Claude Code card with Resume, New Session and Close. Resume brings back the same conversation.">
+<div class="who" aria-hidden="true"><i class="dot d-ended"></i>Claude Code ended · 2m ago</div>
+<p class="gone" data-at="2" aria-hidden="true">The agent quit.</p>
+<div class="btns" aria-hidden="true"><span class="primary" data-at="1" data-until="2">Resume ↩</span><span>New Session</span><span>Close</span></div>
+<div class="term" aria-hidden="true"><span data-at="2">↩ Resuming Claude Code</span><span data-at="3">same conversation</span><span data-at="4">task not sent again <i class="caret"></i></span></div>
+</div>
+<figure class="clip whip" data-clip="resume" data-sizes="720" style="--ar:1728/1080"><i class="echo" aria-hidden="true"></i><div class="clip-frame"><video width="1728" height="1080" muted playsinline loop preload="none" data-poster="/demos/resume.webp" aria-label="Resume (recording)" aria-describedby="resume-cap"></video><button class="clip-toggle" type="button" aria-label="Play">▶</button></div><figcaption id="resume-cap">⌃C twice ends Claude Code; Resume brings back the same conversation.</figcaption></figure>
+<figure class="clip whip" data-clip="resume-all" data-sizes="720" style="--ar:1728/1080"><i class="echo" aria-hidden="true"></i><div class="clip-frame"><video width="1728" height="1080" muted playsinline loop preload="none" data-poster="/demos/resume-all.webp" aria-label="Resume All (recording)" aria-describedby="resume-all-cap"></video><button class="clip-toggle" type="button" aria-label="Play">▶</button></div><figcaption id="resume-all-cap">After a relaunch, Resume All brings back the stopped Codex run.</figcaption></figure>
+</div>
+</div>
+</section>
+
+<section class="section">
+<div class="wrap">
+<span class="tc" aria-hidden="true">// 10 — details · <b>00:00:00:00</b></span>
+<div class="intro">
+<div><p class="chapter">// 10 — details</p>
+<h2 class="reveal"><span class="w"><i>The small things,</i></span> <span class="w accent"><i>handled.</i></span></h2></div>
+<div class="body"><p>Hover any small icon, count, dot or pill for what it means.</p></div>
+</div>
+<div class="bento">
+<article class="tile t7"><h3>Hover anything.</h3><p>“48 commits behind origin/main.”</p><figure class="clip" data-clip="tooltips" data-sizes="720" style="--ar:1728/1080"><div class="clip-frame"><video width="1728" height="1080" muted playsinline loop preload="none" data-poster="/demos/tooltips.webp" aria-label="Tooltips (recording)" aria-describedby="tooltips-cap"></video><button class="clip-toggle" type="button" aria-label="Play">▶</button></div><figcaption id="tooltips-cap">The app's own tooltips: commits behind, a conflict with another task, keep-awake and memory.</figcaption></figure></article>
+<div class="stack">
+<article class="tile" data-tl="4" data-ms="1400" data-hold="0"><h3>Live memory.</h3><div class="metric" aria-label="Memory in the status bar"><span data-vals="1.6|1.7|1.6|1.5">1.6</span><small>GB</small></div><p>In the status bar, next to keep-awake.</p></article>
+<article class="tile" data-tl="3" data-ms="1500" data-hold="0"><h3>Keep-awake.</h3><div class="seg" aria-label="Keep-awake: On, Agents or Off"><i class="thumb" aria-hidden="true"></i><span data-at="0" data-until="1">On</span><span data-at="1" data-until="2">Agents</span><span data-at="2">Off</span></div><p>Keeps the Mac awake always, only while agents work, or never.</p></article>
+</div>
+<article class="tile t6"><h3>⌘A selects what you typed.</h3><p>Not the prompt, not the output.</p><figure class="clip" data-clip="select" data-sizes="720" style="--ar:1728/1080"><div class="clip-frame"><video width="1728" height="1080" muted playsinline loop preload="none" data-poster="/demos/select.webp" aria-label="⌘A in a shell (recording)" aria-describedby="select-cap"></video><button class="clip-toggle" type="button" aria-label="Play">▶</button></div><figcaption id="select-cap">⌘A selects only the typed command; Backspace clears it.</figcaption></figure></article>
+<article class="tile t6"><h3>Studio dark and light.</h3><p>Live preview, and your accent.</p><figure class="clip" data-clip="themes" data-sizes="720" style="--ar:1728/1080"><div class="clip-frame"><video width="1728" height="1080" muted playsinline loop preload="none" data-poster="/demos/themes.webp" aria-label="Appearance (recording)" aria-describedby="themes-cap"></video><button class="clip-toggle" type="button" aria-label="Play">▶</button></div><figcaption id="themes-cap">Studio Light and dark re-render the whole window live.</figcaption></figure></article>
+<article class="tile t12" data-tl="4" data-ms="1000" data-hold="3"><h3>Setup runs before the agent.</h3><p>A new worktree's setup runs in its own pane; the agent starts only once it passes. The first task offers to copy your <code>.env</code>.</p>
+<div class="setup" aria-hidden="true"><div data-at="1"><b>setup</b>npm install</div><div data-at="2"><b>✓ passed</b>setup pane closes</div><div data-at="3"><b>Claude Code</b>starts on the task</div></div></article>
+</div>
+</div>
+</section>
+
+<section class="section dark">
+<div class="wrap">
+<span class="tc" aria-hidden="true">// 11 — cli · <b>00:00:00:00</b></span>
+<div class="intro">
+<div><p class="chapter">// 11 — cli</p>
+<h2 class="reveal"><span class="w"><i>A CLI over</i></span> <span class="w"><i>the same</i></span> <span class="w accent"><i>runtime.</i></span></h2></div>
+<div class="body"><p>Agents create worktrees, open terminals and message you, and the window shows it live. Every command takes <code>--json</code>.</p></div>
+</div>
+<div class="cli-grid">
+<div class="term-big">
+<div class="bar" aria-hidden="true"><i></i><i></i><i></i></div>
+<div class="cmd"><pre id="cli-command" tabindex="0" data-type>teamree worktree create --project orders-api \
+  --name "Export orders as CSV" --agent claude
+teamree terminal list --worktree "Export orders as CSV"
+teamree msg ask "Ship the migration?" --options Yes,No
+teamree status --json</pre><button class="copy" type="button" data-copy="cli-command" aria-label="Copy the CLI commands">Copy</button></div>
+</div>
+<figure class="clip whip" data-clip="cli" data-sizes="1080,720" style="--ar:1728/1080"><i class="echo" aria-hidden="true"></i><div class="clip-frame"><video width="1728" height="1080" muted playsinline loop preload="none" data-poster="/demos/cli.webp" aria-label="The CLI (recording)" aria-describedby="cli-cap"></video><button class="clip-toggle" type="button" aria-label="Play">▶</button></div><figcaption id="cli-cap">teamree worktree create from a shell: the task appears, runs setup and starts Claude Code.</figcaption></figure>
+</div>
+</div>
+</section>
+
+<section class="section" id="install">
+<div class="wrap">
+<span class="tc" aria-hidden="true">// 12 — install · <b>00:00:00:00</b></span>
+<div class="intro">
+<div><p class="chapter">// 12 — install</p>
+<h2 class="reveal"><span class="w"><i>Installed in a</i></span> <span class="w accent"><i>minute.</i></span></h2></div>
+<div class="body"><p>The build isn't signed with an Apple Developer ID yet, so macOS asks once. Nothing was found wrong with it; it just has no certificate naming who built it.</p></div>
+</div>
+<div class="install-grid">
+<ol class="steps">
+<li><h3>Download.</h3><p><a href="https://github.com/zero-abd/teamree/releases/latest/download/teamree-mac-universal.dmg"><code>teamree-mac-universal.dmg</code></a> runs on Apple Silicon and Intel.</p></li>
+<li><h3>Drag teamree to Applications.</h3></li>
+<li><h3>Open it, then press Done.</h3><p>macOS says <b>“teamree” Not Opened</b>. Press <b>Done</b>, not Move to Trash.</p></li>
+<li><h3>Open Anyway, once.</h3><p>System Settings → Privacy &amp; Security → <b>Open Anyway</b>. Or in Terminal:</p>
+<div class="cmd"><pre id="xattr-command" tabindex="0">xattr -dr com.apple.quarantine /Applications/teamree.app</pre><button class="copy" type="button" data-copy="xattr-command" aria-label="Copy the xattr command">Copy</button></div><p>It won't ask again.</p></li>
+<li><h3>Add a repository. Press ⌘N.</h3><p>Describe a task and pick your agents.</p></li>
+</ol>
+<div>
+<div class="alert" role="img" aria-label="The macOS dialog: teamree Not Opened. Apple could not verify teamree is free of malware that may harm your Mac or compromise your privacy. Buttons: Move to Trash, and Done, which is the one to press.">
+<div class="icon" aria-hidden="true"><svg><use href="#mark"/></svg></div>
+<b aria-hidden="true">“teamree” Not Opened</b>
+<p aria-hidden="true">Apple could not verify “teamree” is free of malware that may harm your Mac or compromise your privacy.</p>
+<div class="btns" aria-hidden="true"><span class="trash">Move to Trash</span><span class="done">Done</span></div>
+</div>
+<p class="alert-note">press Done · then Open Anyway</p>
+<div class="settings" role="img" aria-label="System Settings, Privacy and Security: teamree was blocked, with an Open Anyway button."><span aria-hidden="true"><small>Privacy &amp; Security</small>“teamree” was blocked to protect your Mac.</span><span aria-hidden="true">Open Anyway</span></div>
+<p class="fine" style="text-align:center">Check the download: <code>shasum -a 256 teamree-mac-universal.dmg</code> against the release's SHA256SUMS.txt · <a href="https://github.com/zero-abd/teamree/blob/main/docs/install.md">Install guide</a></p>
+</div>
+</div>
+</div>
+</section>
+
+<section class="section" id="faq">
+<div class="wrap">
+<span class="tc" aria-hidden="true">// 13 — faq · <b>00:00:00:00</b></span>
+<p class="chapter">// 13 — faq</p>
+<h2 class="reveal"><span class="w"><i>Questions,</i></span> <span class="w accent"><i>answered.</i></span></h2>
+<div class="faq">
+<details><summary>Is it free?</summary><p>Yes. MIT-licensed, and the source is on <a href="https://github.com/zero-abd/teamree">GitHub</a>.</p></details>
+<details><summary>Which agents does it run?</summary><p>Claude Code, Codex, Gemini CLI, OpenCode, droid and the other agent CLIs on your PATH: 21 in all.</p></details>
+<details><summary>Is it an IDE?</summary><p>No. It runs and watches your agents; your editor stays your editor.</p></details>
+<details><summary>Why does macOS warn me?</summary><p>The build is signed ad-hoc, not with an Apple Developer ID. Press Done, then Open Anyway once. To be sure the file is the one the release built, compare its SHA-256 with the release's SHA256SUMS.txt.</p></details>
+<details><summary>Do teammates need a server?</summary><p>A relay your team hosts. One command deploys it to your own Cloudflare account; nobody hosts one for you. <a href="https://github.com/zero-abd/teamree/blob/main/docs/trying-teamwork.md">Trying teamwork</a></p></details>
+<details><summary>Can the relay read our work?</summary><p>No. Teammates encrypt end to end; the relay only passes the bytes along.</p></details>
+<details><summary>Can a teammate type in my terminal?</summary><p>Only after you allow it: once, for the session, or always.</p></details>
+<details><summary>Windows or Linux?</summary><p>macOS only, by decision.</p></details>
+<details><summary>How does it update?</summary><p>It checks GitHub releases, downloads a new one in the background and offers Restart to Update.</p></details>
+</div>
+</div>
+</section>
+
+<section class="final" aria-labelledby="final-h">
+<div class="wrap final-grid">
+<div class="final-copy">
+<a class="lockup" href="/" aria-label="teamree home"><span class="lockup-tile"><svg aria-hidden="true"><use href="#mark-sm"/></svg></span><span class="lockup-name"><svg class="lockup-word" viewBox="0 10 440 82" overflow="visible" aria-hidden="true"><use href="#wordmark"/></svg><i class="lockup-dot" aria-hidden="true"></i></span></a>
+<h2 class="reveal" id="final-h"><span class="w"><i>Your whole team</i></span> <span class="w"><i>ships in</i></span> <span class="w accent"><i>parallel.</i></span></h2>
+<div class="actions"><a class="button" href="https://github.com/zero-abd/teamree/releases/latest/download/teamree-mac-universal.dmg">Download for macOS</a><a class="button ghost" href="https://github.com/zero-abd/teamree">Source on GitHub</a></div>
+<p class="fine">teamree.us · free · MIT · macOS universal · v0.8.3</p>
+</div>
+<img class="final-sprig" src="/sprig/wave.png" width="600" height="750" alt="" loading="lazy" decoding="async">
+</div>
+</section>
 </main>
-<footer class="site-footer"><div class="wrap"><div class="footer-row"><a class="lockup" href="/" aria-label="teamree home"><span class="lockup-tile"><svg aria-hidden="true"><use href="#mark-sm"/></svg></span><span class="lockup-name"><svg class="lockup-word" viewBox="0 10 440 82" overflow="visible" aria-hidden="true"><use href="#wordmark"/></svg><i class="lockup-dot" aria-hidden="true"></i></span></a><nav class="footer-links" aria-label="Footer"><a href="https://github.com/zero-abd/teamree">Source</a><a href="https://github.com/zero-abd/teamree/releases">Releases</a><a href="https://github.com/zero-abd/teamree/blob/main/LICENSE">MIT</a><a href="https://github.com/zero-abd/teamree/blob/main/docs/install.md">Installing</a><a href="https://github.com/zero-abd/teamree/blob/main/docs/trying-teamwork.md">Trying teamwork</a><a href="https://github.com/zero-abd/teamree/blob/main/ROADMAP.md">Roadmap</a></nav></div><p class="footer-note">macOS. Universal. Free.</p></div></footer>
+
+<footer class="footer">
+<div class="wrap footer-row">
+<div><a class="lockup" href="/" aria-label="teamree home"><span class="lockup-tile"><svg aria-hidden="true"><use href="#mark-sm"/></svg></span><span class="lockup-name"><svg class="lockup-word" viewBox="0 10 440 82" overflow="visible" aria-hidden="true"><use href="#wordmark"/></svg><i class="lockup-dot" aria-hidden="true"></i></span></a><p class="fine">macOS. Universal. Free.</p></div>
+<nav class="footer-links" aria-label="Footer">
+<a href="https://github.com/zero-abd/teamree">GitHub</a><a href="https://github.com/zero-abd/teamree/releases">Releases</a><a href="https://github.com/zero-abd/teamree/blob/main/LICENSE">MIT licence</a><a href="https://github.com/zero-abd/teamree/blob/main/docs/install.md">Install guide</a><a href="https://github.com/zero-abd/teamree/blob/main/docs/trying-teamwork.md">Trying teamwork</a><a href="https://github.com/zero-abd/teamree/blob/main/ROADMAP.md">Roadmap</a>
+</nav>
+</div>
+</footer>
 <script>
-(function () {
-  var header = document.querySelector('.site-header');
-  var toggle = header && header.querySelector('.nav-toggle');
-  var nav = document.getElementById('site-nav');
+(() => {
+  'use strict'
+  requestAnimationFrame(() => requestAnimationFrame(() => document.documentElement.classList.add('hero-ready')))
+  const mq = matchMedia('(prefers-reduced-motion: reduce)')
+  let reduced = mq.matches
+  let loaded = document.readyState === 'complete'
+  const $$ = (s, r = document) => [...r.querySelectorAll(s)]
+  const io = (fn, opt) => new IntersectionObserver((es) => es.forEach(fn), opt)
 
-  if (!header || !toggle || !nav) return;
-  if (location.hash === '#site-nav') {
-    history.replaceState(null, '', location.pathname + location.search);
-  }
-
-  function open(value) {
-    header.dataset.nav = value ? 'open' : 'closed';
-    toggle.setAttribute('aria-expanded', value ? 'true' : 'false');
-  }
-
-  open(false);
-  toggle.addEventListener('click', function (event) {
-    event.preventDefault();
-    open(header.dataset.nav !== 'open');
-  });
-  nav.addEventListener('click', function (event) {
-    if (event.target.closest('a')) open(false);
-  });
-  document.addEventListener('keydown', function (event) {
-    if (event.key === 'Escape' && header.dataset.nav === 'open') {
-      open(false);
-      toggle.focus();
+  // Clips: sources are added near the viewport; a clip plays only while mostly on screen.
+  const clips = $$('[data-clip]')
+  const load = (f) => {
+    if (f.dataset.loaded) return
+    const v = f.querySelector('video')
+    const sizes = f.dataset.sizes.split(',')
+    const size = f.getBoundingClientRect().width * devicePixelRatio > 1300 && sizes.includes('1080') ? '1080' : '720'
+    for (const [ext, type] of [['webm', 'video/webm; codecs="av01.0.08M.08"'], ['mp4', 'video/mp4; codecs="avc1.640028"']]) {
+      const s = document.createElement('source')
+      s.src = `/demos/${f.dataset.clip}-${size}.${ext}`
+      s.type = type
+      v.append(s)
     }
-  });
-  document.addEventListener('click', function (event) {
-    if (header.dataset.nav === 'open' && !header.contains(event.target)) open(false);
-  });
-})();
-
-(function () {
-  var header = document.querySelector('.site-header');
-  var on = false;
-
-  if (!header) return;
-
-  function check() {
-    var y = window.scrollY;
-    if (!on && y > 32) on = true;
-    else if (on && y < 8) on = false;
-    header.classList.toggle('scrolled', on);
+    v.lastElementChild.addEventListener('error', () => { f.querySelector('.clip-toggle').hidden = true })
+    v.load()
+    f.dataset.loaded = '1'
+  }
+  const label = (f, playing) => {
+    const b = f.querySelector('.clip-toggle')
+    b.textContent = playing ? 'Ⅱ' : '▶'
+    b.setAttribute('aria-label', playing ? 'Pause' : 'Play')
+  }
+  const play = (f) => {
+    if (reduced || !loaded || f.dataset.user === 'paused') return
+    load(f)
+    const v = f.querySelector('video')
+    v.play().then(() => label(f, true), () => label(f, false))
+  }
+  const nearby = io((e) => {
+    if (!e.isIntersecting) return
+    const v = e.target.querySelector('video')
+    if (v.dataset.poster && !v.poster) v.poster = v.dataset.poster
+    load(e.target)
+  }, { rootMargin: '600px' })
+  const visible = io((e) => {
+    e.target.dataset.visible = e.intersectionRatio >= 0.35 ? '1' : ''
+    if (e.target.dataset.visible) play(e.target)
+    else { e.target.querySelector('video').pause(); if (!e.target.dataset.user) label(e.target, false) }
+  }, { threshold: [0, 0.35] })
+  for (const f of clips) {
+    nearby.observe(f)
+    visible.observe(f)
+    const v = f.querySelector('video')
+    f.querySelector('.clip-toggle').addEventListener('click', () => {
+      load(f)
+      if (v.paused) { f.dataset.user = ''; v.play().then(() => label(f, true), () => {}) }
+      else { f.dataset.user = 'paused'; v.pause(); label(f, false) }
+    })
+    const sound = f.querySelector('.sound')
+    if (sound) sound.addEventListener('click', () => {
+      load(f)
+      Object.assign(v, { muted: false, loop: false, controls: true, currentTime: 0 })
+      const t = v.textTracks[0]
+      if (t) t.mode = 'showing'
+      f.classList.add('sound-on')
+      f.dataset.user = ''
+      v.play().then(() => label(f, true), () => {})
+      sound.hidden = true
+      v.focus()
+    })
   }
 
-  /* The pill starts as wide as the row so its edges ride with the contents. */
-  function fit() {
-    var row = header.querySelector('.header-row');
-    var pill = row.offsetWidth - 2 * parseFloat(getComputedStyle(row, '::before').left);
-    row.style.setProperty('--gather-s', pill > 0 ? row.offsetWidth / pill : 1);
-  }
-
-  window.addEventListener('scroll', check, { passive: true });
-  window.addEventListener('resize', fit);
-  fit();
-  check();
-})();
-
-/* The mark parts as the page scrolls: scroll sets a target from 0 (the mark at
-   rest) to 1 (two straight panes, slabs apart) and a spring follows it. */
-(function () {
-  var svg = document.getElementById('hero-mark');
-  if (!svg || !window.requestAnimationFrame) return;
-  var left = svg.querySelector('[data-slab="l"]');
-  var right = svg.querySelector('[data-slab="r"]');
-  var calm = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
-  var x = 0, v = 0, target = 0, raf = 0, last = 0;
-  var STIFFNESS = 170, DAMPING = 24, PART = 16;
-
-  function draw(p) {
-    var s = -PART * p, t = PART * p;
-    left.setAttribute('d',
-      'M' + (16 + s) + ' 28H' + (116 + s) + 'V228H' + (16 + s) + 'Q' + (8 + s) + ' 228 ' + (8 + s) + ' 220V36Q' + (8 + s) + ' 28 ' + (16 + s) + ' 28Z' +
-      'M' + (32 + s) + ' ' + (66 - 16 * p) + 'L' + (96 + s) + ' 50V206L' + (32 + s) + ' ' + (190 + 16 * p) + 'Z');
-    right.setAttribute('d',
-      'M' + (140 + t) + ' 28H' + (240 + t) + 'Q' + (248 + t) + ' 28 ' + (248 + t) + ' 36V220Q' + (248 + t) + ' 228 ' + (240 + t) + ' 228H' + (140 + t) + 'Z' +
-      'M' + (160 + t) + ' 48L' + (224 + t) + ' ' + (68 - 20 * p) + 'V' + (188 + 20 * p) + 'L' + (160 + t) + ' 208Z');
-  }
-  function step(now) {
-    var dt = Math.min(0.05, (now - last) / 1000);
-    last = now;
-    var a = -STIFFNESS * (x - target) - DAMPING * v;
-    v += a * dt;
-    x += v * dt;
-    draw(x);
-    if (Math.abs(v) > 0.002 || Math.abs(x - target) > 0.001) {
-      raf = window.requestAnimationFrame(step);
-    } else {
-      raf = 0; x = target; v = 0; draw(x);
+  // Word reveals, whip entries and count-ups.
+  const count = (n) => {
+    const end = +n.dataset.count
+    if (reduced) { n.textContent = end; return }
+    const t0 = performance.now()
+    const tick = (t) => {
+      const p = Math.min(1, (t - t0) / 700)
+      n.textContent = Math.round(end * (1 - (1 - p) ** 3))
+      if (p < 1) requestAnimationFrame(tick)
     }
+    requestAnimationFrame(tick)
   }
-  function want() {
-    var span = Math.max(240, window.innerHeight * 0.5);
-    target = Math.max(0, Math.min(1, window.scrollY / span));
-    if (calm && calm.matches) { x = target; v = 0; draw(x); return; }
-    if (!raf) { last = performance.now(); raf = window.requestAnimationFrame(step); }
-  }
-  window.addEventListener('scroll', want, { passive: true });
-  window.addEventListener('resize', want);
-  want();
-})();
+  const reveal = io((e) => {
+    if (!e.isIntersecting) return
+    e.target.classList.add('in')
+    reveal.unobserve(e.target)
+    $$('[data-count]', e.target).forEach(count)
+    if (e.target.matches('[data-count]')) count(e.target)
+  }, { threshold: 0.15 })
+  $$('.reveal,.whip,.statusbar,.states,[data-type]').forEach((x) => reveal.observe(x))
 
-document.querySelectorAll('.cmd-copy').forEach(function (button) {
-  button.addEventListener('click', function () {
-    var source = document.getElementById(button.dataset.copy);
-    if (!source || !navigator.clipboard) return;
-    navigator.clipboard.writeText(source.textContent.trim()).then(function () {
-      button.textContent = 'Copied';
-      setTimeout(function () {
-        button.textContent = 'Copy';
-      }, 1600);
-    }, function () {});
-  });
-});
-
-(function () {
-  var frames = [].slice.call(document.querySelectorAll('.demo-frame,.shot-frame'));
-  if (!frames.length) return;
-
-  var still = window.matchMedia
-    ? window.matchMedia('(prefers-reduced-motion: reduce)')
-    : null;
-
-  function reduced() {
-    return !!(still && still.matches);
-  }
-
-  function play(video) {
-    var promise = video.play();
-    if (promise && promise.catch) promise.catch(function () {});
-  }
-
-  frames.forEach(function (frame) {
-    var video = frame.querySelector('video');
-    if (!video) return;
-
-    video.removeAttribute('controls');
-    frame.dataset.paused = 'yes';
-
-    var button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'demo-play';
-    button.setAttribute('aria-label', 'Play this clip');
-    button.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7Z"/></svg>';
-    frame.appendChild(button);
-
-    button.addEventListener('click', function () {
-      video.paused ? play(video) : video.pause();
-    });
-    video.addEventListener('play', function () {
-      frame.dataset.paused = 'no';
-      button.setAttribute('aria-label', 'Pause this clip');
-    });
-    video.addEventListener('pause', function () {
-      frame.dataset.paused = 'yes';
-      button.setAttribute('aria-label', 'Play this clip');
-    });
-
-    function giveUp() {
-      if (frame.dataset.failed === 'yes') return;
-      frame.dataset.failed = 'yes';
-      frame.dataset.paused = 'yes';
-      if (button.parentNode) button.parentNode.removeChild(button);
-      frame.__video = null;
-    }
-
-    function exhausted() {
-      if (video.networkState === 3) giveUp();
-    }
-
-    video.addEventListener('error', giveUp);
-    [].slice.call(video.querySelectorAll('source')).forEach(function (source) {
-      source.addEventListener('error', function () {
-        setTimeout(exhausted, 0);
-      });
-    });
-    video.addEventListener('stalled', function () {
-      setTimeout(function () {
-        if (video.readyState < 1) exhausted();
-      }, 8000);
-    });
-    setTimeout(exhausted, 4000);
-    frame.__video = video;
-  });
-
-  if (!('IntersectionObserver' in window)) return;
-
-  var watcher = new IntersectionObserver(function (entries) {
-    entries.forEach(function (entry) {
-      var video = entry.target.__video;
-      if (!video) return;
-      if (entry.isIntersecting) {
-        if (!reduced()) play(video);
-      } else if (!video.paused) {
-        video.pause();
+  // Timelines: children with data-at="n" get .on from step n (until data-until); data-vals picks text per step.
+  const timelines = $$('[data-tl]').map((el) => {
+    const t = { el, steps: +el.dataset.tl, hold: +(el.dataset.hold || 0), ms: +el.dataset.ms, step: -1, timer: 0, live: false,
+      parts: [...$$('[data-at],[data-vals]', el), ...$$(`[data-in="${el.id}"]`)].filter((p) => p.closest('[data-tl]') === el || p.dataset.in === el.id) }
+    return t
+  })
+  const show = (t, step) => {
+    for (const p of t.parts) {
+      if (p.dataset.at !== undefined) {
+        const on = step >= +p.dataset.at && (p.dataset.until === undefined || step < +p.dataset.until)
+        if (on !== p.classList.contains('on')) p.classList.toggle('on', on)
       }
-    });
-  }, { threshold: .4 });
-
-  frames.forEach(function (frame) {
-    watcher.observe(frame);
-  });
-
-  if (still && still.addEventListener) {
-    still.addEventListener('change', function () {
-      if (reduced()) {
-        frames.forEach(function (frame) {
-          if (frame.__video && !frame.__video.paused) frame.__video.pause();
-        });
-      }
-    });
+      if (p.dataset.vals) { const vals = p.dataset.vals.split('|'); p.textContent = vals[Math.min(Math.max(step, 0), vals.length - 1)] }
+    }
+    for (const seg of $$('.seg', t.el)) {
+      const on = seg.querySelector('span.on')
+      if (on) { seg.style.setProperty('--x', `${on.offsetLeft - 3}px`); seg.style.setProperty('--w', `${on.offsetWidth}px`) }
+    }
   }
-})();
+  const run = (t) => {
+    clearTimeout(t.timer)
+    if (!t.live || reduced) return
+    t.timer = setTimeout(() => {
+      t.step = t.step + 1 >= t.steps + t.hold ? -1 : t.step + 1
+      show(t, Math.min(t.step, t.steps - 1))
+      run(t)
+    }, t.step === -1 ? t.ms * 0.6 : t.ms)
+  }
+  const finalState = (t) => { clearTimeout(t.timer); show(t, t.steps - 1) }
+  const tlObserver = io((e) => {
+    const t = timelines.find((x) => x.el === e.target)
+    t.live = e.isIntersecting
+    if (reduced) finalState(t)
+    else if (t.live) run(t)
+    else clearTimeout(t.timer)
+  }, { threshold: 0.3 })
+  timelines.forEach((t) => { show(t, reduced ? t.steps - 1 : -1); tlObserver.observe(t.el) })
+  const landAll = document.getElementById('land-all')
+  const landTl = timelines.find((t) => t.el.id === 'land-tl')
+  if (landAll && landTl) landAll.addEventListener('click', () => {
+    if (reduced) return
+    landTl.step = -1; show(landTl, -1); landTl.live = true; run(landTl)
+  })
+
+  // The CLI types itself once, on first sight.
+  for (const pre of $$('[data-type]')) {
+    const text = pre.textContent
+    pre.dataset.text = text
+    if (reduced) continue
+    pre.textContent = ''
+    const caret = document.createElement('i')
+    caret.className = 'caret'
+    const obs = io((e) => {
+      if (!e.isIntersecting) return
+      obs.disconnect()
+      let i = 0
+      const step = () => {
+        i = Math.min(text.length, i + (text[i] === '\n' ? 1 : 2))
+        pre.textContent = text.slice(0, i)
+        pre.append(caret)
+        if (i < text.length) setTimeout(step, text[i - 1] === '\n' ? 260 : 22)
+      }
+      step()
+    }, { threshold: 0.4 })
+    obs.observe(pre)
+  }
+
+  // Scroll-linked floods, chapter timecodes and ambient loops only for what is on screen.
+  const floods = $$('[data-flood]')
+  const place = () => {
+    for (const s of floods) {
+      if (s.dataset.origin === 'button') {
+        const b = document.getElementById('land-all').getBoundingClientRect(), r = s.getBoundingClientRect()
+        s.style.setProperty('--ox', `${b.left - r.left + b.width / 2}px`)
+        s.style.setProperty('--oy', `${b.top - r.top + b.height / 2}px`)
+      } else {
+        const [x, y] = s.dataset.origin.split(' ')
+        s.style.setProperty('--ox', x); s.style.setProperty('--oy', y)
+      }
+    }
+    for (const r of $$('.relay')) { r.style.setProperty('--dx', `${r.clientWidth * 0.62}px`); r.style.setProperty('--dy', `${r.clientHeight * 0.62}px`) }
+  }
+  let raf = 0
+  const onScroll = () => {
+    raf = 0
+    if (reduced) return
+    const vh = innerHeight
+    for (const s of floods) {
+      const top = s.getBoundingClientRect().top
+      const p = Math.min(1, Math.max(0, (vh - top) / (vh * 0.55)))
+      s.style.setProperty('--p', p.toFixed(3))
+    }
+  }
+  addEventListener('scroll', () => { if (!raf) raf = requestAnimationFrame(onScroll) }, { passive: true })
+  addEventListener('resize', () => { place(); onScroll() })
+  place(); onScroll()
+
+  const active = new Set()
+  const chapters = $$('.section')
+  const ambient = io((e) => { if (e.isIntersecting) active.add(e.target); else active.delete(e.target) }, { threshold: 0 })
+  chapters.forEach((c) => { c._t0 = 0; ambient.observe(c) })
+  const pad = (n) => String(n).padStart(2, '0')
+  let last = 0
+  const frame = (now) => {
+    if (!reduced && now - last > 66) {
+      last = now
+      for (const c of active) {
+        const tc = c.querySelector('.tc b')
+        if (!tc) continue
+        c._t0 ||= now
+        const f = Math.floor(((now - c._t0) / 1000) * 30)
+        tc.textContent = `00:${pad(Math.floor(f / 1800) % 60)}:${pad(Math.floor(f / 30) % 60)}:${pad(f % 30)}`
+      }
+    }
+    requestAnimationFrame(frame)
+  }
+  requestAnimationFrame(frame)
+
+  const svgs = $$('svg').filter((s) => s.querySelector('animateMotion'))
+  const svgObs = io((e) => { if (e.isIntersecting && !reduced) e.target.unpauseAnimations(); else e.target.pauseAnimations() })
+  svgs.forEach((s) => { s.pauseAnimations(); svgObs.observe(s) })
+
+  const sprig = document.querySelector('.hero-sprig')
+  const startSprig = () => {
+    if (!sprig || reduced) return
+    if (!sprig.firstChild) sprig.innerHTML = '<source src="/sprig/idle.webm" type="video/webm; codecs=&quot;av01.0.08M.08&quot;"><source src="/sprig/idle.mp4" type="video/mp4">'
+    sprig.play().catch(() => {})
+  }
+  io((e) => { if (e.isIntersecting && loaded) startSprig(); else if (sprig) sprig.pause() }).observe(document.querySelector('.hero'))
+
+  addEventListener('load', () => {
+    loaded = true
+    clips.filter((f) => f.dataset.visible).forEach(play)
+    if (document.querySelector('.hero').getBoundingClientRect().bottom > 0) startSprig()
+  }, { once: true })
+
+  mq.addEventListener('change', () => {
+    reduced = mq.matches
+    for (const f of clips) {
+      if (reduced) { f.querySelector('video').pause(); label(f, false) }
+      else if (f.dataset.visible) play(f)
+    }
+    for (const t of timelines) reduced ? finalState(t) : t.live && run(t)
+    for (const s of svgs) reduced ? s.pauseAnimations() : s.unpauseAnimations()
+    if (reduced) { sprig && sprig.pause(); floods.forEach((s) => s.style.setProperty('--p', 1)) } else { startSprig(); onScroll() }
+  })
+
+  // Header clock, copy buttons, phone menu.
+  const clock = document.getElementById('clock')
+  const time = () => { clock.textContent = new Date().toLocaleTimeString('en-GB', { hour12: false }) }
+  time(); setInterval(time, 1000)
+  for (const b of $$('[data-copy]')) b.addEventListener('click', async () => {
+    const el = document.getElementById(b.dataset.copy)
+    try { await navigator.clipboard.writeText(el.dataset.text || el.textContent); b.textContent = 'Copied' } catch { b.textContent = 'Select it' }
+    setTimeout(() => { b.textContent = 'Copy' }, 1400)
+  })
+  const header = document.querySelector('.site-header'), toggle = document.querySelector('.nav-toggle')
+  toggle.addEventListener('click', () => toggle.setAttribute('aria-expanded', header.classList.toggle('open')))
+  $$('.nav a').forEach((a) => a.addEventListener('click', () => { header.classList.remove('open'); toggle.setAttribute('aria-expanded', 'false') }))
+  addEventListener('keydown', (e) => { if (e.key === 'Escape' && header.classList.contains('open')) { header.classList.remove('open'); toggle.setAttribute('aria-expanded', 'false'); toggle.focus() } })
+})()
 </script>
-</body></html>
+</body>
+</html>
