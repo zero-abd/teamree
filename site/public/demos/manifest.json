@@ -2,8 +2,8 @@
   "clips": [
     {
       "id": "showreel",
-      "source": "videos/v2/v2.mp4",
-      "poster": "videos/v2/poster.png",
+      "source": "videos/v5/v5.mp4",
+      "poster": "videos/v5/poster.png",
       "audio": true,
       "width": 1920,
       "height": 1080,
@@ -11,7 +11,7 @@
         1080,
         720
       ],
-      "seconds": 17.5,
+      "seconds": 38.7,
       "crf": [
         31,
         44
@@ -218,6 +218,77 @@
         720
       ],
       "seconds": 16.17
+    },
+    {
+      "id": "allow",
+      "source": "clips/masters/03a-asking-in-pane-allow.mp4",
+      "poster": "clips/contact/03a-asking-in-pane-allow.jpg",
+      "width": 1728,
+      "height": 1080,
+      "sizes": [
+        1080,
+        720
+      ],
+      "seconds": 13.8
+    },
+    {
+      "id": "cmd-click",
+      "source": "clips/masters/16-cmd-click-file-path.mp4",
+      "poster": "clips/contact/16-cmd-click-file-path.jpg",
+      "width": 1728,
+      "height": 1080,
+      "sizes": [
+        1080,
+        720
+      ],
+      "seconds": 8.53
+    },
+    {
+      "id": "online",
+      "source": "clips/masters/08e-teamwork-teammate-comes-online.mp4",
+      "poster": "clips/contact/08e-teamwork-teammate-comes-online.jpg",
+      "width": 1728,
+      "height": 1080,
+      "sizes": [
+        720
+      ],
+      "seconds": 8.3
+    },
+    {
+      "id": "overlap",
+      "source": "clips/masters/08g-teamwork-overlap-chip.mp4",
+      "poster": "clips/contact/08g-teamwork-overlap-chip.jpg",
+      "width": 1728,
+      "height": 1080,
+      "sizes": [
+        1080,
+        720
+      ],
+      "seconds": 9.1
+    },
+    {
+      "id": "watch",
+      "source": "clips/masters/08d-teamwork-watch-teammate-pane.mp4",
+      "poster": "clips/contact/08d-teamwork-watch-teammate-pane.jpg",
+      "width": 2048,
+      "height": 1080,
+      "sizes": [
+        1080,
+        720
+      ],
+      "seconds": 11.17
+    },
+    {
+      "id": "team-comment",
+      "source": "clips/masters/08c-teamwork-review-comment-to-agent.mp4",
+      "poster": "clips/contact/08c-teamwork-review-comment-to-agent.jpg",
+      "width": 2048,
+      "height": 1080,
+      "sizes": [
+        1080,
+        720
+      ],
+      "seconds": 23.43
     }
   ]
 }

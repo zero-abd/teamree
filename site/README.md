@@ -9,7 +9,7 @@ public/
   404.html         served with a real 404 for any unknown path
   demos/           clips: <id>-1080|720.webm (AV1) and .mp4 (H.264), <id>.webp posters,
                    manifest.json, showreel.vtt (captions for the reel's voice-over)
-  sprig/           Sprig stills (transparent PNG) and the idle loop, rendered in the studio
+  sprig/           Sprig stills (transparent WebP), rendered in the studio (tools/site-sprig.mjs)
   og.png           1200x630 social card, generated from og/card.html
   robots.txt, sitemap.xml, _headers, _redirects, favicon and icons
 og/

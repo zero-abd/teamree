@@ -1,19 +1,37 @@
 WEBVTT
 
-00:00.300 --> 00:02.400
-Agents stepping on each other?
+00:00.100 --> 00:03.000
+Five agents. One repo. Chaos.
 
-00:02.600 --> 00:05.100
-teamree gives every task its own worktree.
+00:03.160 --> 00:05.600
+Meet teamree, the ADE for teams.
 
-00:05.250 --> 00:07.300
-When one needs you, it asks.
+00:05.800 --> 00:09.500
+Every agent, its own worktree: Claude Code, Codex, side by side.
 
-00:07.400 --> 00:09.700
-Comments go straight to Claude Code.
+00:09.780 --> 00:12.700
+One sidebar shows every task: working, asking, ready.
 
-00:09.800 --> 00:12.600
-Ready to land? Land… All!
+00:12.840 --> 00:15.100
+Agents can even ask you, right from the CLI.
 
-00:12.850 --> 00:15.400
+00:15.210 --> 00:18.600
+Split it. Tab it. Answer it. ⌘-click any file to check its work.
+
+00:18.760 --> 00:21.600
+Host a relay. Send the link. Your team is live.
+
+00:21.780 --> 00:25.850
+Every teammate's agents in one sidebar. Spot the overlap before it's a conflict.
+
+00:26.050 --> 00:28.500
+Review live. Comments go straight to Claude Code.
+
+00:28.730 --> 00:32.200
+Ready to land? Land All. Fetched first, merged in order.
+
+00:32.650 --> 00:34.700
 Your whole team ships in parallel.
+
+00:34.920 --> 00:37.400
+teamree. Open source and free for all.
