@@ -6,7 +6,7 @@ teamree is unsigned, so macOS blocks it the first time. These steps get you past
    <https://github.com/zero-abd/teamree/releases/latest/download/teamree-mac-universal.dmg>
 2. Open the `.dmg` and drag **teamree** to **Applications**.
 3. Open teamree. macOS says **"teamree" Not Opened**. Press **Done**, not **Move to Trash**.
-4. In Terminal, run the command below. Or go to **System Settings → Privacy & Security** and press **Open Anyway** next to teamree.
+4. Open the **Terminal** app and run:
 
 ```sh
 xattr -dr com.apple.quarantine /Applications/teamree.app
