@@ -78,7 +78,7 @@ both, and no GitHub account needed:
 Nothing in it is signed, so the first time you open it macOS will refuse with a
 dialog whose prominent button deletes the download. **Do not press Move to
 Trash**; press **Done**, and read
-[`docs/install.md`](docs/install.md) — it is four paragraphs and it is the
+[`docs/install.md`](docs/install.md) — it is five steps and it is the
 difference between an app that opens and an app you throw away.
 
 To run it from source instead:
