@@ -16,7 +16,7 @@ export type WorktreeStatusSummary = {
   description: string
 }
 
-/** `child`: behind is counted against its parent's branch, and says so. */
+/** `child`: behind is counted against its parent's branch, and says so; its uncommitted files go unsaid. */
 export function summarizeWorktreeStatus(
   status: WorktreeStatus | undefined,
   child = false
@@ -24,7 +24,7 @@ export function summarizeWorktreeStatus(
   if (!status) return null
   if (status.missing) return { ahead: 0, behind: 0, dirty: 0, conflicted: 0, tone: 'conflict', description: 'missing' }
 
-  const dirty = changedFiles(status)
+  const dirty = child ? 0 : changedFiles(status)
   const tone: StatusTone = status.conflicted > 0 ? 'conflict' : dirty > 0 ? 'dirty' : 'quiet'
 
   const parts: string[] = []
