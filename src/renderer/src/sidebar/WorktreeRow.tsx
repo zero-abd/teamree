@@ -356,11 +356,14 @@ export function WorktreeRow({
   const agentWord = display.agent?.kind === undefined || twinRun
   // A task's tally, a handoff and a pull request need the second line too, or their chips squeeze the name.
   const pullShown = ready && !merged && landing?.pullRequest !== undefined
+  const child = worktree.parentId !== undefined
   // Under the name, a branch that is only the name slugified says it twice; the name's hover still has it.
   const branch = [worktree.name, display.title].some((name) => slugifyBranchName(name) === display.branch)
     ? undefined
     : display.branch
-  const twoLines = !compact && (branch !== undefined || task !== undefined || handoff !== null || pullShown)
+  // A child's branch is on the name's hover only.
+  const shownBranch = child ? undefined : branch
+  const twoLines = !compact && (shownBranch !== undefined || task !== undefined || handoff !== null || pullShown)
   // Rolled up: the collapsed row says something wants reading, the pane rows say which.
   const unreadHere = rows.some((row) => unread.has(row.terminalId))
   const testPane = ready ? runPaneOf(terminals, worktree.id, 'test') : undefined
@@ -377,9 +380,7 @@ export function WorktreeRow({
     ...(rolled?.from === undefined ? {} : { from: rolled.from }),
     unread: unreadHere,
     ...(branch === undefined ? {} : { branch }),
-    ...(ready && status !== undefined
-      ? { status, child: worktree.parentId !== undefined, ignored: status.ignored ?? 0 }
-      : {}),
+    ...(ready && status !== undefined ? { status, child, ignored: status.ignored ?? 0 } : {}),
     ...(merged
       ? {
           landed: landing?.notPushed ? ('merged, not pushed' as const) : ('merged' as const)
@@ -397,7 +398,7 @@ export function WorktreeRow({
     report
   })
 
-  const git = ready ? summarizeWorktreeStatus(status, worktree.parentId !== undefined) : null
+  const git = ready ? summarizeWorktreeStatus(status, child) : null
   const gitCounts =
     git !== null &&
     ((!merged && (git.ahead > 0 || git.behind > 0)) || git.tone !== 'quiet' || (status?.ignored ?? 0) > 0)
@@ -418,14 +419,7 @@ export function WorktreeRow({
       words.filter(Boolean).join(' · '),
       // One group, so the open row can hide what its status bar and Changes badge already say.
       <span className="worktree__git">
-        {ready ? (
-          <GitStatusChips
-            status={status}
-            child={worktree.parentId !== undefined}
-            aheadBehind={!merged}
-            baseRef={baseRef}
-          />
-        ) : null}
+        {ready ? <GitStatusChips status={status} child={child} aheadBehind={!merged} baseRef={baseRef} /> : null}
         {merged ? (
           <span className="chip worktree__merged" data-tip={mergedChip(landing).title}>
             {mergedChip(landing).label}
@@ -630,8 +624,8 @@ export function WorktreeRow({
       </span>
       {twoLines ? (
         <span className="worktree__meta" aria-hidden="true">
-          <span className="worktree__branch" data-tip={branch}>
-            {branch ?? ''}
+          <span className="worktree__branch" data-tip={shownBranch}>
+            {shownBranch ?? ''}
           </span>
           {chips.map((chip) => (
             <Fragment key={chip.key}>{chip.node}</Fragment>

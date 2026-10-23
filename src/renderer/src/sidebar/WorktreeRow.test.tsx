@@ -375,6 +375,15 @@ describe('a worktree that is ready', () => {
     expect(screen.getByRole('treeitem', { description: 'branch ada/pager, 1 uncommitted' })).toBe(openButton())
   })
 
+  it('keeps a child’s branch to the name’s hover and leaves out its uncommitted count', () => {
+    mount({ worktree: worktree({ parentId: 'w0', branch: 'ada/pager' }), status: status({ unstaged: 1 }) })
+    expect(within(openButton()).queryByText('ada/pager')).toBeNull()
+    expect(document.querySelector('.worktree__meta')).toBeNull()
+    expect(document.querySelector('.gitchips')).toBeNull()
+    expect(document.querySelector('.worktree__name')?.getAttribute('data-tip')).toContain('ada/pager')
+    expect(screen.getByRole('treeitem', { description: 'branch ada/pager' })).toBe(openButton())
+  })
+
   it('draws a clean merge as a mark, with the sentence on hover', () => {
     mount({
       mergePreview: {
