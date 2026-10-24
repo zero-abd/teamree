@@ -13,7 +13,7 @@
 // `terminalView.test.ts` states the rule on its own, over data. This states
 // what happens.
 
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import { Terminal as XTerm } from '@xterm/xterm'
 import { resolvePlatformModifier } from '../keyboard/platformModifier'
 import { commandForEvent } from '../keyboard/workspaceShortcuts'
@@ -36,6 +36,8 @@ function pane(
   /** Everything handed to the system clipboard. */
   copied: string[]
   press: (key: string, modifiers?: Held) => KeyboardEvent
+  /** The native `paste` event the Edit menu's Paste raises on the focused textarea. */
+  menuPaste: () => void
   write: (data: string) => Promise<void>
 } {
   const host = document.createElement('div')
@@ -51,10 +53,17 @@ function pane(
     isAppChord: options.isAppChord ?? (() => false),
     term,
     modifier: APPLE,
-    send: (data) => sent.push(data),
-    clipboard: {
-      copy: (text) => copied.push(text),
-      read: () => Promise.resolve(options.clipboard ?? '')
+    send: (data) => sent.push(data)
+  })
+  // The system clipboard, watched where every path in the app reaches it.
+  Object.defineProperty(navigator, 'clipboard', {
+    configurable: true,
+    value: {
+      writeText: (text: string) => {
+        copied.push(text)
+        return Promise.resolve()
+      },
+      readText: () => Promise.resolve(options.clipboard ?? '')
     }
   })
   term.attachCustomKeyEventHandler(handler)
@@ -77,12 +86,24 @@ function pane(
       term.textarea?.dispatchEvent(event)
       return event
     },
+    menuPaste: () => {
+      const event = new Event('paste', { bubbles: true, cancelable: true })
+      Object.defineProperty(event, 'clipboardData', { value: { getData: () => options.clipboard ?? '' } })
+      term.textarea?.dispatchEvent(event)
+    },
     write: (data) =>
       new Promise<void>((resolve) => {
         term.write(data, () => setTimeout(resolve, 0))
       })
   }
 }
+
+afterEach(() => {
+  Reflect.deleteProperty(navigator, 'clipboard')
+})
+
+/** Long enough for a clipboard read the keypress started to land. */
+const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0))
 
 describe('the chord that is two commands', () => {
   it('copies the selection, and sends nothing to the pty', async () => {
@@ -111,23 +132,26 @@ describe('the chord that is two commands', () => {
     expect(copied).toEqual([])
   })
 
-  it('pastes through the emulator, with the brackets the program asked for', async () => {
-    const { press, sent, write } = pane({ clipboard: 'npm test' })
+  // ⌘V is the key-down and then the menu's native paste: one paste between them, with the brackets.
+  it('pastes once, through the emulator, with the brackets the program asked for', async () => {
+    const { press, menuPaste, sent, write } = pane({ clipboard: 'npm test' })
     // Bracketed paste mode, which is what a shell turns on so that it can tell
     // typed text from pasted text.
     await write('\u001b[?2004h')
 
     press('v', { metaKey: true })
-    await Promise.resolve()
+    menuPaste()
+    await settle()
 
     expect(sent).toEqual(['\u001b[200~npm test\u001b[201~'])
   })
 
   it('pastes plainly when the program did not ask for the brackets', async () => {
-    const { press, sent } = pane({ clipboard: 'npm test' })
+    const { press, menuPaste, sent } = pane({ clipboard: 'npm test' })
 
     press('v', { metaKey: true })
-    await Promise.resolve()
+    menuPaste()
+    await settle()
 
     expect(sent).toEqual(['npm test'])
   })
