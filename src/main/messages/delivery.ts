@@ -1,9 +1,10 @@
 // Puts queued messages into agent prompts: a bracketed paste, then Return, the way a
-// review comment is sent. Only into an agent pane that is stopped and nobody is typing in.
+// review comment is sent. Only into a stopped agent pane whose input holds no draft.
 
 import type { Terminal } from '../../shared/entities'
 import { activityOf } from '../../shared/paneActivity'
 import type { TaskMessage } from '../../shared/messages'
+import { hasDraft, NO_DRAFT, typedInto, type Draft } from './draft'
 import type { MessageStore } from './messageStore'
 import { pastedText, type NameOf } from './messageText'
 import { runsAgent } from './routing'
@@ -33,6 +34,7 @@ export type DeliveryOptions = {
 
 export class Delivery {
   private readonly typedAt = new Map<string, number>()
+  private readonly drafts = new Map<string, Draft>()
   private readonly pastedAt = new Map<string, number>()
   private wake: { at: number; cancel: () => void } | undefined
   private pumping = false
@@ -51,13 +53,19 @@ export class Delivery {
       })
   }
 
-  /** A person's keystroke reached this pane. */
-  noteTyped(terminalId: string): void {
+  /** A person's keys reached this pane; `menu` when its screen shows a menu they answer. */
+  noteTyped(terminalId: string, data: string, menu = false): void {
     this.typedAt.set(terminalId, this.now())
+    const before = this.drafts.get(terminalId) ?? NO_DRAFT
+    const after = typedInto(before, data, menu)
+    this.drafts.set(terminalId, after)
+    // Sent or cleared by hand: no agent event follows that would pump.
+    if (hasDraft(before) && !hasDraft(after)) this.pump()
   }
 
   forget(terminalId: string): void {
     this.typedAt.delete(terminalId)
+    this.drafts.delete(terminalId)
     this.pastedAt.delete(terminalId)
   }
 
@@ -82,20 +90,17 @@ export class Delivery {
   private pumpOnce(): void {
     const now = this.now()
     let wakeAt = Number.POSITIVE_INFINITY
-    const used = new Set<string>()
     for (const message of this.options.store.list({ open: true })) {
       const worktreeId = message.to.worktreeId
       if (message.state !== 'queued' || worktreeId === undefined) continue
       const panes = this.options.panes
         .list(worktreeId)
         .filter((pane) => message.to.terminalId === undefined || pane.id === message.to.terminalId)
-        .filter((pane) => pane.running && pane.draining !== true && runsAgent(pane) && !used.has(pane.id))
+        .filter((pane) => pane.running && pane.draining !== true && runsAgent(pane))
       for (const pane of panes) {
+        // A pane pasted into on this pass is held by its gap, and wakes the pump for what queues behind.
         const held = this.heldUntil(pane, now)
-        if (held === 0 && this.paste(pane.id, message)) {
-          used.add(pane.id)
-          break
-        }
+        if (held === 0 && this.paste(pane.id, message)) break
         if (held > 0) wakeAt = Math.min(wakeAt, held)
       }
     }
@@ -105,6 +110,8 @@ export class Delivery {
   /** 0 when the pane may take a paste now, the time it may otherwise, or Infinity when only an event can tell. */
   private heldUntil(pane: Terminal, now: number): number {
     if (activityOf(pane) !== 'quiet') return Number.POSITIVE_INFINITY
+    // A paste joins the draft and its Return sends both; only the person's next key can free it.
+    if (hasDraft(this.drafts.get(pane.id) ?? NO_DRAFT)) return Number.POSITIVE_INFINITY
     const typed = this.typedAt.get(pane.id)
     if (typed !== undefined && now - typed < TYPING_WINDOW_MS) return typed + TYPING_WINDOW_MS
     const pasted = this.pastedAt.get(pane.id)
