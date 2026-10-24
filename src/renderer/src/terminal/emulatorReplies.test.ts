@@ -155,6 +155,8 @@ describe('what a local pane calls a person typing', () => {
     element: HTMLElement
     wrote: { data: string; byHand: boolean }[]
     press: (key: string) => void
+    /** The native `paste` event the Edit menu's Paste raises. */
+    menuPaste: () => void
     write: (data: string) => Promise<void>
   } {
     const host = document.createElement('div')
@@ -173,9 +175,7 @@ describe('what a local pane calls a person typing', () => {
         isAppChord: () => false,
         term,
         modifier: APPLE,
-        send,
-        byHand: hands.mark,
-        clipboard: { copy: () => {}, read: () => Promise.resolve(clipboard) }
+        send
       })
     )
     term.onData((data) => send(data, hands.acting()))
@@ -191,6 +191,11 @@ describe('what a local pane calls a person typing', () => {
           cancelable: true
         })
         Object.defineProperty(event, 'keyCode', { value: key.toUpperCase().charCodeAt(0) })
+        term.textarea?.dispatchEvent(event)
+      },
+      menuPaste: () => {
+        const event = new Event('paste', { bubbles: true, cancelable: true })
+        Object.defineProperty(event, 'clipboardData', { value: { getData: () => clipboard } })
         term.textarea?.dispatchEvent(event)
       },
       write: (data) =>
@@ -209,15 +214,12 @@ describe('what a local pane calls a person typing', () => {
     expect(pane.wrote.every((write) => write.byHand)).toBe(false)
   })
 
-  // The paste chord is the one action whose bytes arrive after the event that
-  // asked for them: the clipboard is read a turn of the loop later and the text
-  // goes in through the emulator, so there is nothing in flight by then to say
-  // who wanted it. Vouched for instead, which is what `byHand` on the handler
-  // is for — and getting this wrong would mean a pane somebody pasted a whole
-  // task into came back on the next launch as a pane nobody had touched.
-  it('counts a paste that outlived the chord that asked for it', async () => {
+  // ⌘V's text arrives on the menu's `paste` event, not the key-down. Missing it would bring a pane
+  // somebody pasted a whole task into back on the next launch as a pane nobody had touched.
+  it('counts the menu’s paste as typing, once', async () => {
     const pane = localPane('npm test')
     pane.press('v')
+    pane.menuPaste()
     await Promise.resolve()
     expect(pane.wrote).toEqual([{ data: 'npm test', byHand: true }])
   })

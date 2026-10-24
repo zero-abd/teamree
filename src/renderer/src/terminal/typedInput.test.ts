@@ -27,6 +27,7 @@ const KEY_CODES: Record<string, number> = { Backspace: 8, Delete: 46, Escape: 27
 const open: XTerm[] = []
 afterEach(() => {
   for (const term of open.splice(0)) term.dispose()
+  Reflect.deleteProperty(navigator, 'clipboard')
 })
 
 function emulator(
@@ -180,6 +181,8 @@ function pane(options: { typed?: string; left?: number; clipboard?: string } = {
   copied: string[]
   line: () => string
   press: (key: string, modifiers?: Partial<Record<'metaKey' | 'shiftKey' | 'altKey' | 'ctrlKey', boolean>>) => void
+  /** The native `paste` event the Edit menu's Paste raises. */
+  menuPaste: () => void
   settled: () => Promise<void>
 } {
   const { term, find } = emulator()
@@ -203,10 +206,13 @@ function pane(options: { typed?: string; left?: number; clipboard?: string } = {
       term,
       modifier: APPLE,
       send: (data) => input.write(data, true),
-      input,
-      clipboard: { copy: (text) => copied.push(text), read: () => Promise.resolve(options.clipboard ?? '') }
+      input
     })
   )
+  Object.defineProperty(navigator, 'clipboard', {
+    configurable: true,
+    value: { writeText: (text: string) => Promise.resolve(void copied.push(text)) }
+  })
   return {
     term,
     sent,
@@ -215,6 +221,11 @@ function pane(options: { typed?: string; left?: number; clipboard?: string } = {
     press: (key, modifiers = {}) => {
       const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...modifiers })
       Object.defineProperty(event, 'keyCode', { value: KEY_CODES[key] ?? key.toUpperCase().charCodeAt(0) })
+      term.textarea?.dispatchEvent(event)
+    },
+    menuPaste: () => {
+      const event = new Event('paste', { bubbles: true, cancelable: true })
+      Object.defineProperty(event, 'clipboardData', { value: { getData: () => options.clipboard ?? '' } })
       term.textarea?.dispatchEvent(event)
     },
     settled: () => new Promise((resolve) => term.write('', () => setTimeout(resolve, 0)))
@@ -277,6 +288,7 @@ describe('⌘A in a pane', () => {
     await pasting.settled()
     pasting.press('a', { metaKey: true })
     pasting.press('v', { metaKey: true })
+    pasting.menuPaste()
     await vi.waitFor(() => expect(pasting.line()).toBe('ls -la'))
     expect(pasting.line()).toBe('ls -la')
   })

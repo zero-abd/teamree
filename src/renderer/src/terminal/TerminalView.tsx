@@ -47,7 +47,6 @@ import { TerminalSearchBar } from './TerminalSearchBar'
 import {
   holdRightClickFromProgram,
   menuAnchor,
-  pasteFromClipboard,
   reportsMouse,
   rightClickOpensMenu,
   runTerminalMenuAction,
@@ -630,10 +629,7 @@ function openEmulator(
     term,
     modifier,
     send: (data) => typed.write(data, true),
-    input: typed,
-    // The clipboard read a paste chord waits on outlives the keypress, so
-    // the person behind it has to be vouched for rather than observed.
-    byHand: hands.mark
+    input: typed
   })
   // Every keydown, not only those that reach `onData` at once: an IME's text arrives a turn later.
   let typedAt = 0
@@ -875,15 +871,11 @@ const worktreeFileNames = fileListings(async (worktreeId, dir) => {
 export type PaneKeys = {
   /** Chords the app owns. Refused here, and answered by the window handler. */
   isAppChord: (event: KeyboardEvent) => boolean
-  /** The emulator: what is selected, and where a paste goes in. */
-  term: Pick<XTerm, 'hasSelection' | 'getSelection' | 'paste' | 'options' | 'selectAll'>
+  /** The emulator: what is selected. */
+  term: Pick<XTerm, 'hasSelection' | 'getSelection' | 'options' | 'selectAll'>
   modifier: PlatformModifier
   /** Bytes to the pty. */
   send: (data: string) => void
-  /** Vouches for a paste, which lands a turn after the chord and goes in through the emulator. See `handsHere.ts`. */
-  byHand?: () => void
-  /** The system clipboard, injected so a test can watch it. */
-  clipboard?: { copy: (text: string) => void; read: () => Promise<string> }
   /** What was typed at the prompt, for ⌘A to select and a key to clear. See `typedInput.ts`. */
   input?: Pick<TypedInputSelection, 'select' | 'active' | 'text' | 'drop' | 'clear'>
 }
@@ -892,10 +884,9 @@ export type PaneKeys = {
  * The pane's answer to one keypress, as xterm's custom key handler wants it:
  * `true` to let the emulator have it, `false` to keep it. App chords first, then ⌘A and the keys on a
  * selected input (`typedInput.ts`), the Mac editing keys (`macEditKeys.ts`), the clipboard pair, then the emulator.
- * On macOS the Edit menu claims these accelerators before the page; the branch it loses is in `src/main/appMenu.ts`.
+ * ⌘V is kept from the emulator and left to the Edit menu's Paste; see `src/main/appMenu.ts`.
  */
 export function paneKeyHandler(keys: PaneKeys): (event: KeyboardEvent) => boolean {
-  const clipboard = keys.clipboard ?? { copy: copyText, read: pasteText }
   return (event) => {
     if (keys.isAppChord(event)) return false
     const input = keys.modifier.eventFlag === 'metaKey' ? keys.input : undefined
@@ -924,9 +915,9 @@ export function paneKeyHandler(keys: PaneKeys): (event: KeyboardEvent) => boolea
     // One press raises keydown, keypress and keyup. Act on the keydown alone;
     // keep the other two from the emulator too, since half a chord is worse than none.
     if (event.type !== 'keydown') return false
-    if (intent === 'copy') clipboard.copy(keys.input?.active() ? keys.input.text() : keys.term.getSelection())
+    if (intent === 'copy') copyText(keys.input?.active() ? keys.input.text() : keys.term.getSelection())
     else if (intent === 'interrupt') keys.send(INTERRUPT)
-    else pasteFromClipboard(keys.term, clipboard, keys.byHand)
+    // The menu's Paste raises a native `paste` event that xterm takes in; pasting here as well pastes twice.
     return false
   }
 }

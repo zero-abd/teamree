@@ -9,11 +9,11 @@
 // renderer as the one dispatcher and is documented as a no-op on macOS —
 // single dispatch either way.
 //
-// The Edit roles do real work: xterm has no clipboard, so Cmd+C/Cmd+V in a pane
-// are those items. The menu claims them first, so a copy with nothing selected
-// is a no-op rather than the interrupt; taking the accelerator off would cost
-// Cmd+C/V in every text field. Reload is offered only under a dev server: Cmd+R
-// throws every pane view away silently.
+// The Edit roles do real work: xterm has no clipboard, so Cmd+V in a pane is
+// the Paste item's native `paste` event, and the pane's key handler must not
+// paste too. Taking the accelerator off would cost Cmd+C/V in every text
+// field. Reload is offered only under a dev server: Cmd+R throws every pane
+// view away silently.
 
 import type { AboutPanelOptionsOptions, MenuItemConstructorOptions } from 'electron'
 import { DEV_VERSION } from './appVersion'
