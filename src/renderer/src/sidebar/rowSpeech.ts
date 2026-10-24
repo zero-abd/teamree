@@ -18,8 +18,6 @@ export type RowFacts = {
   /** Drawn only when it says more than the name. */
   branch?: string
   status?: WorktreeStatus
-  /** Behind counts against the parent. */
-  child?: boolean
   ignored?: number
   landed?: 'merged' | 'merged, not pushed'
   merge?: WorktreeMergePreview
@@ -39,7 +37,7 @@ export type RowFacts = {
 const SHOWN_FILES = 3
 
 export function rowSpeech(facts: RowFacts): string {
-  const summary = summarizeWorktreeStatus(facts.status, facts.child === true)
+  const summary = summarizeWorktreeStatus(facts.status)
   const counts = summary?.description.split(' · ').filter((part) => part !== 'clean, in sync') ?? []
   const ports = facts.ports ?? []
   const missing = facts.lifecycle === 'missing' || facts.status?.missing === true

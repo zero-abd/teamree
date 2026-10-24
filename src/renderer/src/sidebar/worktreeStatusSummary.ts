@@ -16,21 +16,17 @@ export type WorktreeStatusSummary = {
   description: string
 }
 
-/** `child`: behind is counted against its parent's branch, and says so; its uncommitted files go unsaid. */
-export function summarizeWorktreeStatus(
-  status: WorktreeStatus | undefined,
-  child = false
-): WorktreeStatusSummary | null {
+export function summarizeWorktreeStatus(status: WorktreeStatus | undefined): WorktreeStatusSummary | null {
   if (!status) return null
   if (status.missing) return { ahead: 0, behind: 0, dirty: 0, conflicted: 0, tone: 'conflict', description: 'missing' }
 
-  const dirty = child ? 0 : changedFiles(status)
+  const dirty = changedFiles(status)
   const tone: StatusTone = status.conflicted > 0 ? 'conflict' : dirty > 0 ? 'dirty' : 'quiet'
 
   const parts: string[] = []
   if (status.operation !== undefined) parts.push(status.operation === 'rebase' ? 'rebasing' : 'merging')
   if (status.ahead > 0) parts.push(`${status.ahead} ahead`)
-  if (status.behind > 0) parts.push(child ? `${status.behind} behind parent` : `${status.behind} behind`)
+  if (status.behind > 0) parts.push(`${status.behind} behind`)
   if (status.conflicted > 0) parts.push(`${status.conflicted} conflicted`)
   if (dirty > 0) parts.push(`${dirty} uncommitted`)
   if (parts.length === 0) parts.push('clean, in sync')

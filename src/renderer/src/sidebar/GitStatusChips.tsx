@@ -10,13 +10,10 @@ import { summarizeWorktreeStatus } from './worktreeStatusSummary'
 
 export function GitStatusChips({
   status,
-  child = false,
   aheadBehind = true,
   baseRef
 }: {
   status: WorktreeStatus | undefined
-  /** Behind its parent's branch rather than the project's base. */
-  child?: boolean
   /** False once the branch has landed, where its count against the base says nothing. */
   aheadBehind?: boolean
   /** What `behind` is counted against: the worktree's own base ref, else its project's. */
@@ -25,7 +22,7 @@ export function GitStatusChips({
   const unreadableSince = useWorkspaceStore((state) => (status ? state.unreadableSince[status.worktreeId] : undefined))
   // The age is the one number here that changes while nothing happens.
   const now = useNow()
-  const summary = summarizeWorktreeStatus(status, child)
+  const summary = summarizeWorktreeStatus(status)
   const stale = statusStaleness({ status, unreadableSince, now })
   if (!summary || status === undefined) return null
   const refs = gitRefs(status, baseRef)
@@ -52,7 +49,7 @@ export function GitStatusChips({
           <span className="gitchip__glyph" aria-hidden="true">
             ↓
           </span>
-          {child ? `${summary.behind} parent` : summary.behind}
+          {summary.behind}
         </span>
       ) : null}
       {summary.tone !== 'quiet' ? (

@@ -52,7 +52,7 @@ describe('what a worktree row says', () => {
   })
 
   it('reads the git chips as words joined by commas', () => {
-    expect(rowSpeech({ status: status({ ahead: 1, behind: 1 }), child: true })).toBe('1 ahead, 1 behind parent')
+    expect(rowSpeech({ status: status({ ahead: 1, behind: 1 }) })).toBe('1 ahead, 1 behind')
     expect(rowSpeech({ status: status({ ahead: 2, unstaged: 1, untracked: 2 }) })).toBe('2 ahead, 3 uncommitted')
     expect(rowSpeech({ status: status({ conflicted: 1 }) })).toBe('1 conflicted')
     expect(rowSpeech({ status: status({ ahead: 1 }), ignored: 4 })).toBe('1 ahead, 4 ignored')

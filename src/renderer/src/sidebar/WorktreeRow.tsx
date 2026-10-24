@@ -361,8 +361,9 @@ export function WorktreeRow({
   const branch = [worktree.name, display.title].some((name) => slugifyBranchName(name) === display.branch)
     ? undefined
     : display.branch
-  // A child's branch is on the name's hover only.
+  // A child's branch is on the name's hover only, and it draws no git chips.
   const shownBranch = child ? undefined : branch
+  const gitStatus = ready && !child ? status : undefined
   const twoLines = !compact && (shownBranch !== undefined || task !== undefined || handoff !== null || pullShown)
   // Rolled up: the collapsed row says something wants reading, the pane rows say which.
   const unreadHere = rows.some((row) => unread.has(row.terminalId))
@@ -380,7 +381,7 @@ export function WorktreeRow({
     ...(rolled?.from === undefined ? {} : { from: rolled.from }),
     unread: unreadHere,
     ...(branch === undefined ? {} : { branch }),
-    ...(ready && status !== undefined ? { status, child, ignored: status.ignored ?? 0 } : {}),
+    ...(gitStatus === undefined ? {} : { status: gitStatus, ignored: gitStatus.ignored ?? 0 }),
     ...(merged
       ? {
           landed: landing?.notPushed ? ('merged, not pushed' as const) : ('merged' as const)
@@ -398,10 +399,10 @@ export function WorktreeRow({
     report
   })
 
-  const git = ready ? summarizeWorktreeStatus(status, child) : null
+  const git = summarizeWorktreeStatus(gitStatus)
   const gitCounts =
     git !== null &&
-    ((!merged && (git.ahead > 0 || git.behind > 0)) || git.tone !== 'quiet' || (status?.ignored ?? 0) > 0)
+    ((!merged && (git.ahead > 0 || git.behind > 0)) || git.tone !== 'quiet' || (gitStatus?.ignored ?? 0) > 0)
   const pullChip = pullShown ? pullRequestChip(landing?.pullRequest) : null
   const port = ready ? portChip(terminals, worktree.id, (id) => id) : null
   const tests = testPane === undefined ? undefined : runState(testPane)
@@ -419,7 +420,7 @@ export function WorktreeRow({
       words.filter(Boolean).join(' · '),
       // One group, so the open row can hide what its status bar and Changes badge already say.
       <span className="worktree__git">
-        {ready ? <GitStatusChips status={status} child={child} aheadBehind={!merged} baseRef={baseRef} /> : null}
+        <GitStatusChips status={gitStatus} aheadBehind={!merged} baseRef={baseRef} />
         {merged ? (
           <span className="chip worktree__merged" data-tip={mergedChip(landing).title}>
             {mergedChip(landing).label}
