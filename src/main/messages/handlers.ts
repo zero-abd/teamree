@@ -1,4 +1,4 @@
-// Wires messages into the runtime: the three methods, a person's keystrokes (which hold
+// Wires messages into the runtime: the three methods, a person's keystrokes (a draft holds
 // a paste back), and the moments a queued message may go in: a Stop, a pane going quiet.
 
 import { join } from 'node:path'
@@ -52,7 +52,12 @@ export function registerMessageHandlers(
   const write = registry.lookup('terminal.write')
   if (write !== undefined) {
     registry.register('terminal.write', Params.terminalWrite, async (params, call) => {
-      if (params.byHand !== false) service.delivery.noteTyped(params.terminalId)
+      if (params.byHand !== false) {
+        const menu =
+          params.answering !== undefined ||
+          manager.list().find((entry) => entry.id === params.terminalId)?.screenMenu !== undefined
+        service.delivery.noteTyped(params.terminalId, params.data, menu)
+      }
       return (await write.handler(params as never, call)) as { written: true }
     })
   }

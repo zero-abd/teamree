@@ -254,12 +254,76 @@ describe('delivery', () => {
   })
 
   it('holds a paste while a person types, and delivers once they stop', async () => {
-    service.delivery.noteTyped('t_lead')
+    service.delivery.noteTyped('t_lead', '\x1b[A')
+    service.delivery.noteTyped('t_lead', '\x1b[B')
+    service.delivery.noteTyped('t_lead', '\r')
     await service.send({ from: fromTests, to: { relation: 'parent' }, kind: 'note', text: 'fyi' })
     expect(pastes()).toEqual([])
     advance(TYPING_WINDOW_MS - 1)
     expect(pastes()).toEqual([])
     advance(1)
+    expect(pastes('t_lead')).toHaveLength(1)
+  })
+
+  it('delivers at once when nothing is typed', async () => {
+    await service.send({ from: fromTests, to: { relation: 'parent' }, kind: 'note', text: 'fyi' })
+    expect(pastes('t_lead')).toHaveLength(1)
+  })
+
+  it('holds every message while a draft waits, then delivers them alone and in order once it is sent', async () => {
+    for (const key of ['f', 'i', 'x', ' ', 't', 'h']) service.delivery.noteTyped('t_lead', key)
+    for (const text of ['one', 'two', 'three']) {
+      await service.send({ from: fromTests, to: { relation: 'parent' }, kind: 'note', text })
+    }
+    advance(60_000)
+    expect(written).toEqual([])
+
+    service.delivery.noteTyped('t_lead', 'e')
+    service.delivery.noteTyped('t_lead', '\r')
+    const notes = (): (string | undefined)[] => pastes('t_lead').map((text) => /: (\w+)\x1b\[201~$/u.exec(text)?.[1])
+    advance(TYPING_WINDOW_MS)
+    expect(notes()).toEqual(['one'])
+    advance(DELIVERY_GAP_MS)
+    advance(DELIVERY_GAP_MS)
+    expect(notes()).toEqual(['one', 'two', 'three'])
+  })
+
+  it('delivers once the draft is erased, or cleared with Ctrl-C or Ctrl-U', async () => {
+    for (const clear of [['\x7f', '\x7f'], ['\x03'], ['\x15']]) {
+      written = []
+      service.delivery.noteTyped('t_lead', '\x1b[200~hi\x1b[201~')
+      await service.send({ from: fromTests, to: { relation: 'parent' }, kind: 'note', text: 'fyi' })
+      advance(10_000)
+      expect(pastes()).toEqual([])
+      for (const key of clear) service.delivery.noteTyped('t_lead', key)
+      advance(TYPING_WINDOW_MS)
+      expect(pastes('t_lead')).toHaveLength(1)
+      advance(DELIVERY_GAP_MS)
+    }
+  })
+
+  it('keeps holding when an edit may leave text behind', async () => {
+    for (const key of ['ab', '\x1b[D', '\x15', '\x1b[A']) service.delivery.noteTyped('t_lead', key)
+    await service.send({ from: fromTests, to: { relation: 'parent' }, kind: 'note', text: 'fyi' })
+    advance(60_000)
+    expect(pastes()).toEqual([])
+    service.delivery.noteTyped('t_lead', '\x1b[F')
+    service.delivery.noteTyped('t_lead', '\x15')
+    advance(TYPING_WINDOW_MS)
+    expect(pastes('t_lead')).toHaveLength(1)
+  })
+
+  it('does not take a menu answer for a draft, nor for sending one', async () => {
+    service.delivery.noteTyped('t_lead', '1', true)
+    await service.send({ from: fromTests, to: { relation: 'parent' }, kind: 'note', text: 'one' })
+    advance(TYPING_WINDOW_MS)
+    expect(pastes('t_lead')).toHaveLength(1)
+
+    service.delivery.noteTyped('t_lead', 'draft')
+    service.delivery.noteTyped('t_lead', '\x1b[B', true)
+    service.delivery.noteTyped('t_lead', '\r')
+    await service.send({ from: fromTests, to: { relation: 'parent' }, kind: 'note', text: 'two' })
+    advance(60_000)
     expect(pastes('t_lead')).toHaveLength(1)
   })
 
