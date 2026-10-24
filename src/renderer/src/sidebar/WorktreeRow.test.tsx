@@ -359,13 +359,6 @@ describe('a worktree that is ready', () => {
     expect(head.firstElementChild?.classList.contains('activity')).toBe(true)
   })
 
-  it('says a child is behind its parent, not behind main', () => {
-    mount({ worktree: worktree({ parentId: 'w0', baseRef: 'rework-auth' }), status: status({ behind: 2 }) })
-    const chips = document.querySelector('.gitchips') as HTMLElement
-    expect(chips.textContent).toBe('↓2 parent')
-    expect(chips.getAttribute('aria-label')).toBe('git status: 2 behind parent')
-  })
-
   it('keeps its chips beside the branch when the branch says more', () => {
     mount({ worktree: worktree({ branch: 'ada/pager' }), status: status({ unstaged: 1 }) })
     const meta = document.querySelector('.worktree__meta') as HTMLElement
@@ -375,8 +368,11 @@ describe('a worktree that is ready', () => {
     expect(screen.getByRole('treeitem', { description: 'branch ada/pager, 1 uncommitted' })).toBe(openButton())
   })
 
-  it('keeps a child’s branch to the name’s hover and leaves out its uncommitted count', () => {
-    mount({ worktree: worktree({ parentId: 'w0', branch: 'ada/pager' }), status: status({ unstaged: 1 }) })
+  it('keeps a child’s branch to the name’s hover and draws none of its git chips', () => {
+    mount({
+      worktree: worktree({ parentId: 'w0', branch: 'ada/pager' }),
+      status: status({ ahead: 1, behind: 2, unstaged: 1, conflicted: 1, ignored: 3 })
+    })
     expect(within(openButton()).queryByText('ada/pager')).toBeNull()
     expect(document.querySelector('.worktree__meta')).toBeNull()
     expect(document.querySelector('.gitchips')).toBeNull()
@@ -1405,7 +1401,6 @@ describe('what a screen reader hears for a row', () => {
       () => 'search page'
     ) as OverlapChip
     mount({
-      worktree: worktree({ parentId: 'w0' }),
       status: status({ ahead: 1, behind: 1 }),
       terminals: [asking()],
       evidence: { t1: 'Allow command?' },
@@ -1432,7 +1427,7 @@ describe('what a screen reader hears for a row', () => {
     expect(
       screen.getByRole('treeitem', {
         description:
-          'asking: Allow command?, 1 ahead, 1 behind parent, PR 42, 2 checks failing, port 5173, ' +
+          'asking: Allow command?, 1 ahead, 1 behind, PR 42, 2 checks failing, port 5173, ' +
           'would conflict with search page in server.js'
       })
     ).toBe(openButton())
@@ -1750,15 +1745,12 @@ describe('what the small marks say under the pointer', () => {
     useWorkspaceStore.setState({ projects: [] })
   })
 
-  it('names the ref a worktree was opened against, and a child’s parent branch', () => {
+  it('names the ref a worktree was opened against', () => {
     mount({
       worktree: worktree({ baseRef: 'origin/release' }),
       status: status({ behind: 1, upstream: null, ahead: 2 })
     })
     expect(tips()).toEqual(['2 commits ahead of origin/release, not pushed', '1 commit behind origin/release'])
-    cleanup()
-    mount({ worktree: worktree({ parentId: 'w0', baseRef: 'rework-auth' }), status: status({ behind: 2 }) })
-    expect(tips()).toEqual(['2 commits behind rework-auth'])
   })
 
   it('says what the dot and the Merged pill mean, in the tooltip rather than a native title', () => {
