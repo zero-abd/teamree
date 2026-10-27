@@ -228,7 +228,7 @@ function mount(overrides: Partial<Parameters<typeof WatchedPaneView>[0]> = {}): 
   return { onClose, onFocus, onOutput, rerender: (next) => rerender(view(next)), unmount }
 }
 
-/** One keystroke as the browser delivers it: the DOM event, then xterm's bytes. `emits` is the no-person case. */
+/** One keystroke as the browser delivers it: xterm's bytes inside the DOM event. `emits` is the no-person case. */
 function press(data: string): void {
   emits(data, { user: true })
 }
@@ -236,8 +236,9 @@ function press(data: string): void {
 /** Bytes leaving the emulator, with or without a person behind them. */
 function emits(data: string, { user }: { user: boolean }): void {
   const term = fakeTerms.at(-1)
-  if (user) term?.element?.dispatchEvent(new KeyboardEvent('keydown', { key: data, bubbles: true }))
-  term?.data?.(data)
+  if (!user) return term?.data?.(data)
+  term?.element?.addEventListener('keydown', () => term.data?.(data), { once: true })
+  term?.element?.dispatchEvent(new KeyboardEvent('keydown', { key: data, bubbles: true }))
 }
 
 /** Everything the view has put into the pane, as one string. */

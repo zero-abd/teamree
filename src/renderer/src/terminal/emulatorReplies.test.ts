@@ -20,7 +20,7 @@
 // typed into, and a pane that has been typed into is a pane the next launch
 // comes back to resume.
 
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { Terminal as XTerm } from '@xterm/xterm'
 import { resolvePlatformModifier } from '../keyboard/platformModifier'
 import { handsHere } from './handsHere'
@@ -109,6 +109,21 @@ describe('telling a person from a stream', () => {
     expect(unprompted).toEqual([])
   })
 
+  // A real keystroke's dispatch runs microtasks after each listener, before xterm's own raises `onData`;
+  // a script's dispatch does not. Running them at once stands in for the browser.
+  it('sends what somebody typed when microtasks run between listeners', () => {
+    const at = vi.spyOn(globalThis, 'queueMicrotask').mockImplementation((run) => run())
+    try {
+      const { element, sent, unprompted } = emulator()
+      const textarea = element.querySelector('textarea') as HTMLTextAreaElement
+      textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', keyCode: 65, bubbles: true, cancelable: true }))
+      expect(sent).toEqual(['a'])
+      expect(unprompted).toEqual([])
+    } finally {
+      at.mockRestore()
+    }
+  })
+
   // The mark is on the action rather than on the bytes, so the same string is
   // sent or not sent depending only on whether somebody produced it. This is
   // the pair to the reply cases above: identical data, opposite answer.
@@ -130,17 +145,17 @@ describe('telling a person from a stream', () => {
   // The listeners come off with the pane. A gate left attached to a disposed
   // emulator's element would be a leak rather than a hole, but it would also
   // mean the pane that replaced it was being judged by the wrong one.
-  it('stops watching when the pane goes', async () => {
+  it('stops watching when the pane goes', () => {
     const { element } = emulator()
     const hands = handsHere(element)
+    const during: boolean[] = []
+    element.addEventListener('keydown', () => during.push(hands.acting()))
     element.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', bubbles: true }))
-    expect(hands.acting()).toBe(true)
-    await Promise.resolve()
     expect(hands.acting()).toBe(false)
 
     hands.stop()
     element.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', bubbles: true }))
-    expect(hands.acting()).toBe(false)
+    expect(during).toEqual([true, false])
   })
 })
 
