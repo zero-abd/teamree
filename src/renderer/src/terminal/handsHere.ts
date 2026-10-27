@@ -4,8 +4,8 @@
 // and retire its restored badge (see `TerminalRecord.typed`).
 
 /**
- * A capture listener marks real input for one microtask (xterm raises `onData` synchronously inside the
- * event; replies come later from `write()`). `mark` covers a clipboard paste resolved a turn later.
+ * A person's event counts until its dispatch ends, which covers the `onData` xterm raises inside it; a microtask
+ * would not, as a browser runs them between listeners. `mark` vouches for a menu paste for one microtask.
  */
 export type HandsHere = { acting: () => boolean; mark: () => void; stop: () => void }
 
@@ -25,19 +25,23 @@ const HANDS_EVENTS = [
 ] as const
 
 export function handsHere(element: HTMLElement | undefined): HandsHere {
-  let acting = false
+  let event: Event | undefined
+  let vouched = false
+  const seen = (next: Event): void => {
+    event = next
+  }
   const mark = (): void => {
-    acting = true
+    vouched = true
     queueMicrotask(() => {
-      acting = false
+      vouched = false
     })
   }
-  for (const type of HANDS_EVENTS) element?.addEventListener(type, mark, true)
+  for (const type of HANDS_EVENTS) element?.addEventListener(type, seen, true)
   return {
-    acting: () => acting,
+    acting: () => vouched || (event !== undefined && event.eventPhase !== Event.NONE),
     mark,
     stop: () => {
-      for (const type of HANDS_EVENTS) element?.removeEventListener(type, mark, true)
+      for (const type of HANDS_EVENTS) element?.removeEventListener(type, seen, true)
     }
   }
 }

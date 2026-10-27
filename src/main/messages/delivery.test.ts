@@ -265,6 +265,22 @@ describe('delivery', () => {
     expect(pastes('t_lead')).toHaveLength(1)
   })
 
+  it('leaves the Return to a person who types between the paste and it, and holds the next message', async () => {
+    await service.send({ from: fromTests, to: { relation: 'parent' }, kind: 'note', text: 'one' })
+    expect(pastes('t_lead')).toHaveLength(1)
+    service.delivery.noteTyped('t_lead', 'h')
+    advance(PASTE_SETTLE_MS)
+    expect(written.map((entry) => entry.data)).not.toContain('\r')
+
+    service.delivery.noteTyped('t_lead', '\x7f')
+    await service.send({ from: fromTests, to: { relation: 'parent' }, kind: 'note', text: 'two' })
+    advance(60_000)
+    expect(pastes('t_lead')).toHaveLength(1)
+    service.delivery.noteTyped('t_lead', '\r')
+    advance(TYPING_WINDOW_MS)
+    expect(pastes('t_lead')).toHaveLength(2)
+  })
+
   it('delivers at once when nothing is typed', async () => {
     await service.send({ from: fromTests, to: { relation: 'parent' }, kind: 'note', text: 'fyi' })
     expect(pastes('t_lead')).toHaveLength(1)

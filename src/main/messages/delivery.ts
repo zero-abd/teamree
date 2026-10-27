@@ -127,7 +127,13 @@ export class Delivery {
     } catch {
       return false
     }
+    // Keys that land after the paste join it, and the Return would send them too; it is theirs to press.
+    this.typedAt.delete(terminalId)
     this.later(() => {
+      if (this.typedAt.has(terminalId)) {
+        this.drafts.set(terminalId, { ...(this.drafts.get(terminalId) ?? NO_DRAFT), unknown: true })
+        return
+      }
       try {
         this.options.panes.write(terminalId, '\r')
       } catch {
